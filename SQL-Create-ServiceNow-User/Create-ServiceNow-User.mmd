@@ -1,0 +1,58 @@
+﻿---
+references:
+  - "File: /c:/Users/Mstam/OneDrive -
+    Centric/Documents/Klanten/BNG/RDP/Create-ServiceNow-User.sql"
+generationTime: 2026-06-19T08:35:25.240Z
+---
+flowchart TD
+    A(["START"]) --> B["USE master database"]
+    B --> C["DECLARE @server_name, @sql variables"]
+    C --> D[["sp_executesql: SERVERPROPERTY('MachineName')"]]
+    D --> E[/"PRINT @server_name"/]
+
+    E --> F["Build CREATE LOGIN statement\n@server_name + '\\servicenow'"]
+    F --> G[["sp_executesql: CREATE LOGIN\n[machine\\servicenow] FROM WINDOWS\nDEFAULT_DATABASE = master"]]
+
+    G --> H["Build CREATE USER statement\nfor master db"]
+    H --> I[["sp_executesql: CREATE USER\n[machine\\servicenow]\nFOR LOGIN [machine\\servicenow]"]]
+
+    I --> J["Build ALTER USER statement"]
+    J --> K[["sp_executesql: ALTER USER\n[machine\\servicenow]\nWITH DEFAULT_SCHEMA = dbo"]]
+
+    K --> L["GO — batch boundary"]
+
+    L --> M["USE msdb database"]
+    M --> N["DECLARE @server_name, @sql variables"]
+    N --> O[["sp_executesql: SERVERPROPERTY('MachineName')"]]
+
+    O --> P["Build CREATE USER statement\nfor msdb db"]
+    P --> Q[["sp_executesql: CREATE USER\n[machine\\servicenow]\nFOR LOGIN [machine\\servicenow]"]]
+
+    Q --> R["Build ALTER USER statement"]
+    R --> S[["sp_executesql: ALTER USER\n[machine\\servicenow]\nWITH DEFAULT_SCHEMA = dbo"]]
+
+    S --> T["GO — batch boundary"]
+    T --> U(["END"])
+
+    subgraph batch1 ["Batch 1 — master database scope"]
+        B
+        C
+        D
+        E
+        F
+        G
+        H
+        I
+        J
+        K
+    end
+
+    subgraph batch2 ["Batch 2 — msdb database scope"]
+        M
+        N
+        O
+        P
+        Q
+        R
+        S
+    end

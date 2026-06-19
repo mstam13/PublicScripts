@@ -6,6 +6,7 @@ A collection of reusable PowerShell and T-SQL scripts for enterprise infrastruct
 
 | Folder | Type | Description |
 | --- | --- | --- |
+| [Generate-RDCManConfigs](Generate-RDCManConfigs/) | PowerShell | Generates RDCMan (`.rdg`) configuration files for one or more Active Directory domains by querying enabled Windows Server objects and organising them into OU-mirrored groups. |
 | [SQL-Create-ServiceNow-User](SQL-Create-ServiceNow-User/) | T-SQL | Provisions a Windows-authenticated SQL Server login and database user for the local `<MachineName>\servicenow` account, used by ServiceNow discovery and integration. |
 
 ## Usage
@@ -22,6 +23,7 @@ Refer to the `.md` file in each folder for detailed instructions before running 
 
 - **SQL scripts** — SQL Server 2016 or later; SSMS or `sqlcmd` for execution.
 - **PowerShell scripts** — PowerShell 5.1 or PowerShell 7+; modules listed per script.
+  - `Generate-RDCManConfigs` requires the `ActiveDirectory` module (RSAT).
 
 ## License
 

@@ -6,8 +6,9 @@ A collection of reusable PowerShell and T-SQL scripts for enterprise infrastruct
 
 | Folder | Version | Type | Description |
 | --- | --- | --- | --- |
-| [Generate-RDCManConfigs](Generate-RDCManConfigs/) | 2.0.0 | PowerShell | Generates RDCMan (`.rdg`) configuration files for one or more Active Directory domains by querying enabled Windows Server objects and organising them into OU-mirrored groups. |
 | [CleanupPolicies](CleanupPolicies/) | 1.0.0 | PowerShell | Inventories Group Policy Objects that are unlinked (not applied to any OU, site or domain container) or have no 'Apply Group Policy' Allow ACE, producing an Excel/CSV report for GPO cleanup reviews. |
+| [Generate-RDCManConfigs](Generate-RDCManConfigs/) | 2.0.0 | PowerShell | Generates RDCMan (`.rdg`) configuration files for one or more Active Directory domains by querying enabled Windows Server objects and organising them into OU-mirrored groups. |
+| [Get-ServiceAccounts](Get-ServiceAccounts/) | 1.7 | PowerShell | Scans all enabled Windows Server objects in Active Directory for non-standard accounts used by Windows services and scheduled tasks, exporting results to Excel and per-server CSV files. |
 | [SQL-Create-ServiceNow-User](SQL-Create-ServiceNow-User/) | 1.0 | T-SQL | Provisions a Windows-authenticated SQL Server login and database user for the local `<MachineName>\servicenow` account, used by ServiceNow discovery and integration. |
 
 ## Usage
@@ -24,8 +25,9 @@ Refer to the `.md` file in each folder for detailed instructions before running 
 
 - **SQL scripts** — SQL Server 2016 or later; SSMS or `sqlcmd` for execution.
 - **PowerShell scripts** — PowerShell 5.1 or PowerShell 7+; modules listed per script.
-  - `Generate-RDCManConfigs` requires the `ActiveDirectory` module (RSAT).
   - `CleanupPolicies` requires the `GroupPolicy` and `ActiveDirectory` modules (RSAT); optionally `ImportExcel` for `.xlsx` output.
+  - `Generate-RDCManConfigs` requires the `ActiveDirectory` module (RSAT).
+  - `Get-ServiceAccounts` requires the `ActiveDirectory` module (RSAT) and `ImportExcel`; WMI/CIM access to target servers (WinRM preferred, DCOM fallback).
 
 ## License
 

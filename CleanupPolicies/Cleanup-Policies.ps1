@@ -157,7 +157,8 @@ foreach ($gpo in $allGpos) {
         $hasApplyAce = $false
         foreach ($ace in $aclNodes) {
             $standard = $ace.Standard.GPOGroupedAccessEnum
-            if ($standard -eq 'Apply Group Policy') {
+            # GPOGroupedAccessEnum may combine rights, e.g. "Read, Apply Group Policy"
+            if ($standard -match 'Apply Group Policy') {
                 # Only count Allow ACEs (not Deny)
                 if ($ace.Type.PermissionType -eq 'Allow') {
                     $hasApplyAce = $true

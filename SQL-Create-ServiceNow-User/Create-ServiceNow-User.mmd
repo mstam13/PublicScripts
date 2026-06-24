@@ -1,10 +1,4 @@
-﻿---
-references:
-  - "File: /c:/Users/Mstam/OneDrive -
-    Centric/Documents/Klanten/BNG/RDP/Create-ServiceNow-User.sql"
-generationTime: 2026-06-19T08:35:25.240Z
----
-flowchart TD
+﻿flowchart TD
     A(["START"]) --> B["USE master database"]
     B --> C["DECLARE @server_name, @sql variables"]
     C --> D[["sp_executesql: SERVERPROPERTY('MachineName')"]]

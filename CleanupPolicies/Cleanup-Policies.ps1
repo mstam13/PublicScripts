@@ -140,6 +140,21 @@ function Get-AllGpoLink {
 #region Main
 Write-ScriptLog "Starting GPO inventory for domain: $Domain"
 
+#Import modules
+Write-ScriptLog "Checking required modules..."
+if (-not (Get-Module -Name GroupPolicy)) {
+    Write-ScriptLog "Importing GroupPolicy module..."
+    Import-Module GroupPolicy -ErrorAction Stop
+}
+if (-not (Get-Module -Name ImportExcel)) {
+    Write-ScriptLog "Importing ImportExcel module..."
+    Import-Module ImportExcel -ErrorAction Stop
+}
+if (-not (Get-Module -Name ActiveDirectory)) {
+    Write-ScriptLog "Importing ActiveDirectory module..."
+    Import-Module ActiveDirectory -ErrorAction Stop
+}
+
 # Collect all GPO links
 Write-ScriptLog "Collecting all GPO links..."
 $allLinks = Get-AllGpoLink -DomainFqdn $Domain

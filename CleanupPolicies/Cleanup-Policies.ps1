@@ -150,22 +150,12 @@ foreach ($gpo in $allGpos) {
     $isUnlinked = -not $allLinks.ContainsKey($id)
 
     #--- Check 2: no 'Apply Group Policy' Allow ACE ---
+    # Use Get-GPPermission -All instead of XML report parsing: the GPPermissionType enum
+    # value 'GpoApply' is locale-independent, whereas the XML GPOGroupedAccessEnum text
+    # is localised (e.g. Dutch: "Groepsbeleid toepassen") and would cause false positives.
     try {
-        $report   = [xml] (Get-GPOReport -Guid $id -ReportType Xml -Domain $Domain)
-        $aclNodes = $report.GPO.SecurityDescriptor.Permissions.TrusteePermissions
-
-        $hasApplyAce = $false
-        foreach ($ace in $aclNodes) {
-            $standard = $ace.Standard.GPOGroupedAccessEnum
-            # GPOGroupedAccessEnum may combine rights, e.g. "Read, Apply Group Policy"
-            if ($standard -match 'Apply Group Policy') {
-                # Only count Allow ACEs (not Deny)
-                if ($ace.Type.PermissionType -eq 'Allow') {
-                    $hasApplyAce = $true
-                    break
-                }
-            }
-        }
+        $perms = Get-GPPermission -Guid $id -All -Domain $Domain -ErrorAction Stop
+        $hasApplyAce = [bool]($perms | Where-Object { $_.Permission -eq 'GpoApply' -and -not $_.Denied })
     }
     catch {
         Write-ScriptLog "Could not read ACL for GPO '$($gpo.DisplayName)': $_" -Level 'WARN'

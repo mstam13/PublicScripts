@@ -5,9 +5,8 @@
 This workspace contains PowerShell automation scripts for enterprise identity and infrastructure management at **TBI / SSC** (Service Delivery). Key domains:
 
 - **Azure AD / Entra ID** — Microsoft Graph API, app registrations, certificate-based auth
-- **On-premises Active Directory** — RSAT, nested group membership (`APL-*`, `RES-*`, `DEL-*` prefixes, domain: `tbi.nl`, `global.tbi.nl`)
+- **On-premises Active Directory** — RSAT, nested group membership (`APL-*`, `RES-*`, `DEL-*` prefixes, domain: `contoso.com`, `global.contoso.com`)
 - **Infrastructure** — SQL Server, Configuration Manager, DFS, Windows network administration
-- **Change Management** — Scripts tied to change requests (`CHG*` prefix); input/output artifacts stored in `Changes/CHG*/`
 - **Language mix** — English code, Dutch variable names and comments are both acceptable
 
 ## Script Structure

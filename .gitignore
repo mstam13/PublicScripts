@@ -1,41 +1,45 @@
-﻿*.log*
-*.xlsx*
-*.csv*
-*.bak*
-*.tmp*
-*.old*
+# Runtime output — logs and report files produced by scripts
+Log/
+Output/
+*.log
+*.xlsx
+*.csv
+*_FailedServers.txt
+
+# Config files that hold credentials / tenant IDs (use *-config.json convention)
+# Sample / template configs (*-config.sample.json, *-template.*) are NOT excluded.
+*-config.json
+*-config.xml
+
+# Certificates and private keys
+*.pfx
+*.cer
+*.key
+*.pem
+*.p12
+*.crt
+
+# Archives and disk images
+*.zip
+*.tar
+*.gz
+*.7z
+*.iso
+*.vhd
+*.vmdk
+
+# Temp, swap and backup files
+*.tmp
+*.old
+*.bak
+*.backup
 *.swp
 *.ps1~
-*.mdf
-*.ldf
 *.cache
 *.db
-*.txt*
-*.json*
-*.xml*
-*.pfx*
-*.cer*
-*.key*
-*.pem*
-*.zip*
-*.tar*
-*.gz*
-*.7z*
-*.iso*
-*.vhd*
-*.vmdk*
-*.bak*
-*.backup*
-*.log*
-*.xlsx*
-*.csv*
-*.tmp*
-*.old*
-*.swp
-*.ps1~
 *.mdf
 *.ldf
-*.cache
-*.db
-*.txt*
+
+# Editor / IDE artefacts
+.vscode/
 .markdownlint.json

@@ -156,6 +156,8 @@ foreach ($gpo in $allGpos) {
     try {
         $perms = Get-GPPermission -Guid $id -All -Domain $Domain -ErrorAction Stop
         $hasApplyAce = [bool]($perms | Where-Object { $_.Permission -eq 'GpoApply' -and -not $_.Denied })
+        $aceStatus = if ($hasApplyAce) { 'HasApplyACE' } else { 'NoApplyACE' }
+        Write-ScriptLog "  [$aceStatus] $($gpo.DisplayName)"
     }
     catch {
         Write-ScriptLog "Could not read ACL for GPO '$($gpo.DisplayName)': $_" -Level 'WARN'

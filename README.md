@@ -7,7 +7,7 @@ A collection of reusable PowerShell and T-SQL scripts for enterprise infrastruct
 | Folder | Version | Type | Description |
 | --- | --- | --- | --- |
 | [Add-Named-Instances](Add-Named-Instances/) | 1.9.0 | PowerShell | Assigns SQL Server named instance service accounts to the required local security groups for CIS hardening. Creates missing groups automatically; verifies LSA rights via `secedit`. Supports `-WhatIf`. |
-| [CleanupPolicies](CleanupPolicies/) | 1.0.0 | PowerShell | Inventories Group Policy Objects that are unlinked (not applied to any OU, site or domain container) or have no 'Apply Group Policy' Allow ACE, producing an Excel/CSV report for GPO cleanup reviews. |
+| [CleanupPolicies](CleanupPolicies/) | 1.1.0 | PowerShell | Inventories Group Policy Objects that are unlinked (not applied to any OU, site or domain container) or have no 'Apply Group Policy' Allow ACE, producing an Excel/CSV report for GPO cleanup reviews. |
 | [Generate-RDCManConfigs](Generate-RDCManConfigs/) | 2.0.0 | PowerShell | Generates RDCMan (`.rdg`) configuration files for one or more Active Directory domains by querying enabled Windows Server objects and organising them into OU-mirrored groups. |
 | [Get-ServiceAccounts](Get-ServiceAccounts/) | 1.7 | PowerShell | Scans all enabled Windows Server objects in Active Directory for non-standard accounts used by Windows services and scheduled tasks, exporting results to Excel and per-server CSV files. |
 | [SQL-Create-ServiceNow-User](SQL-Create-ServiceNow-User/) | 1.0 | T-SQL | Provisions a Windows-authenticated SQL Server login and database user for the local `<MachineName>\servicenow` account, used by ServiceNow discovery and integration. |

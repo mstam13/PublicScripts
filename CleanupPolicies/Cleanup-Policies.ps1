@@ -38,8 +38,8 @@
     Runs against contoso.com and writes the report to C:\Reports.
 .NOTES
     Author      : M. Stam
-    Date        : 2026-06-22
-    Version     : 1.0.0
+    Date        : 2026-06-25
+    Version     : 1.1.0
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -48,7 +48,15 @@
     Permissions : Domain read access.
                   Group Policy: Read permission on all GPOs.
 
+    Apply ACE detection uses Get-GPPermission -All with the locale-independent
+    GPPermissionType enum value 'GpoApply'. The earlier approach of parsing
+    Get-GPOReport XML relied on the localised string 'Apply Group Policy'
+    (Dutch: 'Groepsbeleid toepassen'), which caused false positives.
+
     Version history:
+      1.1.0  2026-06-25  M. Stam  Fixed Apply ACE detection to use Get-GPPermission
+                                   instead of XML report parsing (locale-independent).
+                                   Added per-GPO [HasApplyACE]/[NoApplyACE] log entries.
       1.0.0  2026-06-22  M. Stam  Initial release.
 #>
 #Requires -Modules GroupPolicy, ActiveDirectory

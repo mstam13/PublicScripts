@@ -85,13 +85,16 @@ Install-Module -Name ImportExcel -Scope CurrentUser
 2. **GPO enumeration** — Calls `Get-GPO -All` to retrieve every GPO in the domain.
 3. **Unlinked check** — A GPO is flagged if its GUID does not appear in the link
    lookup from step 1.
-4. **Apply ACE check** — Calls `Get-GPOReport -ReportType Xml` per GPO and parses
-   the `<TrusteePermissions>` nodes. A GPO is flagged when none of the ACEs combine
-   `GPOGroupedAccessEnum = 'Apply Group Policy'` with `PermissionType = 'Allow'`.
+4. **Apply ACE check** — Calls `Get-GPPermission -All` per GPO and inspects the
+   returned `GPPermission` objects. A GPO is flagged when none of the ACEs have
+   `Permission -eq 'GpoApply'` with `Denied -eq $false`. Using the `GPPermissionType`
+   enum value avoids false positives caused by localised UI strings (e.g. Dutch:
+   `'Groepsbeleid toepassen'`) that would have broken an XML-parsing approach.
 5. **Export** — Results are written to Excel (two worksheets) or CSV (two files).
 
 ## Version history
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-06-25 | M. Stam | Fixed Apply ACE detection to use `Get-GPPermission` (locale-independent); added per-GPO `[HasApplyACE]`/`[NoApplyACE]` log entries |
 | 1.0.0 | 2026-06-22 | M. Stam | Initial release |

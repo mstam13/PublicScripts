@@ -53,6 +53,7 @@ After group memberships are updated, the effective local security policy is veri
 
 - Must be run with **local administrator** privileges (`#Requires -RunAsAdministrator`). When run as a GPO startup script the process runs as SYSTEM, which satisfies this requirement.
 - PowerShell 5.1 or later (uses `Get-LocalGroup`, `Get-LocalGroupMember`, `Add-LocalGroupMember`, `New-LocalGroup`).
+- **64-bit PowerShell is required.** The `Microsoft.PowerShell.LocalAccounts` module (`Get-LocalGroup`, `Add-LocalGroupMember`, `New-LocalGroup`) is not available in 32-bit PowerShell on a 64-bit system. GPO startup scripts must invoke `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (64-bit), not `%SystemRoot%\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`.
 - The machine execution policy must allow the script to run. Configure via GPO (`Computer Configuration > Windows Settings > Security Settings > Software Restriction Policies` or via `Turn on Script Execution` in Administrative Templates), or sign the script with a trusted code-signing certificate.
 
 ### GPO Startup Script configuration
@@ -64,6 +65,8 @@ Add a **PowerShell** startup script entry (not a legacy script entry) under
 | --- | --- |
 | Script Name | `powershell.exe` |
 | Script Parameters | `-NonInteractive -ExecutionPolicy RemoteSigned -File "\\<server>\<share>\Add-Named-Instances.ps1"` |
+
+> **Important:** GPO runs startup scripts via `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (64-bit) by default. Verify the Script Name resolves to the 64-bit executable — the `LocalAccounts` module required by this script is unavailable in 32-bit PowerShell.
 
 Or store the script locally on each machine (e.g. via a GPO file preference) and reference it as:
 

@@ -39,7 +39,7 @@
 .NOTES
     Author      : M. Stam
     Date        : 2026-06-25
-    Version     : 1.1.0
+    Version     : 1.2.0
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -49,11 +49,14 @@
                   Group Policy: Read permission on all GPOs.
 
     Apply ACE detection uses Get-GPPermission -All with the locale-independent
-    GPPermissionType enum value 'GpoApply'. The earlier approach of parsing
-    Get-GPOReport XML relied on the localised string 'Apply Group Policy'
-    (Dutch: 'Groepsbeleid toepassen'), which caused false positives.
+    GPPermissionType enum value 'GpoApply'. GPPermission objects do not expose a
+    'Denied' property; GpoApply already represents an Allow ACE. The earlier
+    approach of parsing Get-GPOReport XML relied on the localised string 'Apply
+    Group Policy' (Dutch: 'Groepsbeleid toepassen'), which caused false positives.
 
     Version history:
+      1.2.0  2026-06-25  M. Stam  Removed dead '-not $_.Denied' filter (GPPermission has
+                                   no Denied property; GpoApply already implies Allow).
       1.1.0  2026-06-25  M. Stam  Fixed Apply ACE detection to use Get-GPPermission
                                    instead of XML report parsing (locale-independent).
                                    Added per-GPO [HasApplyACE]/[NoApplyACE] log entries.
@@ -163,7 +166,8 @@ foreach ($gpo in $allGpos) {
     # is localised (e.g. Dutch: "Groepsbeleid toepassen") and would cause false positives.
     try {
         $perms = Get-GPPermission -Guid $id -All -Domain $Domain -ErrorAction Stop
-        $hasApplyAce = [bool]($perms | Where-Object { $_.Permission -eq 'GpoApply' -and -not $_.Denied })
+        # GPPermission objects have no 'Denied' property; GpoApply already represents an Allow ACE.
+        $hasApplyAce = [bool]($perms | Where-Object { $_.Permission -eq 'GpoApply' })
         $aceStatus = if ($hasApplyAce) { 'HasApplyACE' } else { 'NoApplyACE' }
         Write-ScriptLog "  [$aceStatus] $($gpo.DisplayName)"
     }

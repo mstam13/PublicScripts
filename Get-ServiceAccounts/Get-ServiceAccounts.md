@@ -91,7 +91,7 @@ The following tasks are filtered out **on the remote server** before results are
 
 - Offline or unreachable servers are logged with `[WARN]` and skipped.
 - CIM sessions are always cleaned up after each server (including the interim WSMan session when falling back to DCOM). Both WSMan and DCOM sessions use a 30-second `-OperationTimeoutSec` to prevent hangs on unresponsive hosts.
-- `Test-Connection` uses `-TimeoutSeconds 2` to avoid multi-second delays per unreachable host.
+- `Test-Connection -TimeoutSeconds` requires **PowerShell 6.1 or later**. On PowerShell 5.1 this parameter does not exist and the script must be run from PowerShell 7+ for per-host timeout control.
 - A `Write-Progress` bar shows the current server and completion percentage during the scan.
 - `Export-Csv` uses `-Encoding UTF8`; on PowerShell 5.1 this writes a BOM — switch to `UTF8NoBOM` on PS 7+ if BOM-free output is required.
 - `$servers.Count` in the summary is wrapped with `@()` to handle `$null` or single-object results from `Get-ADComputer`.

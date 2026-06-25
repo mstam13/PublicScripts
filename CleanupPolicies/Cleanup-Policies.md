@@ -86,15 +86,18 @@ Install-Module -Name ImportExcel -Scope CurrentUser
 3. **Unlinked check** — A GPO is flagged if its GUID does not appear in the link
    lookup from step 1.
 4. **Apply ACE check** — Calls `Get-GPPermission -All` per GPO and inspects the
-   returned `GPPermission` objects. A GPO is flagged when none of the ACEs have
-   `Permission -eq 'GpoApply'` with `Denied -eq $false`. Using the `GPPermissionType`
-   enum value avoids false positives caused by localised UI strings (e.g. Dutch:
-   `'Groepsbeleid toepassen'`) that would have broken an XML-parsing approach.
+   returned `GPPermission` objects. A GPO is flagged when no ACE has
+   `Permission -eq 'GpoApply'`. The `GPPermissionType` enum value `GpoApply`
+   already represents an Allow ACE for Apply Group Policy — `GPPermission` objects
+   do not expose a `Denied` property. Using the enum value also avoids false
+   positives caused by localised UI strings (e.g. Dutch: `'Groepsbeleid toepassen'`)
+   that would have broken an XML-parsing approach.
 5. **Export** — Results are written to Excel (two worksheets) or CSV (two files).
 
 ## Version history
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-06-25 | M. Stam | Removed dead `-not $_.Denied` filter (`GPPermission` has no `Denied` property; `GpoApply` already implies an Allow ACE); updated How-it-works description |
 | 1.1.0 | 2026-06-25 | M. Stam | Fixed Apply ACE detection to use `Get-GPPermission` (locale-independent); added per-GPO `[HasApplyACE]`/`[NoApplyACE]` log entries |
 | 1.0.0 | 2026-06-22 | M. Stam | Initial release |

@@ -43,3 +43,6 @@ Output/
 # Editor / IDE artefacts
 .vscode/
 .markdownlint.json
+
+# Local wiki drafts (published to the separate *.wiki.git repository)
+wiki/

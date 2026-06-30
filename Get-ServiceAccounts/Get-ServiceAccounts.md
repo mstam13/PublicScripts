@@ -27,6 +27,72 @@ For each server the script:
 5. Exports service accounts to `<ServerName>_Services.csv` and task accounts to `<ServerName>_ScheduledTasks.csv` in `.\Output\`.
 6. Logs all activity to a timestamped file in `.\Log\`.
 
+## Script Flow
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Initialise\nCreate Output + Log dirs\nSet log / Excel / FailedServers paths]
+    B --> C{ComputerList\nprovided?}
+
+    C -- Yes --> D[Read server names\nfrom text file\nSkip # lines and blanks]
+    C -- No --> E[Get-ADComputer\nFilter: Windows Server + Enabled\nOptional SearchBase]
+    E --> F{AD query\nsucceeded?}
+    F -- No --> G[Log ERROR\nexit 1]
+    F -- Yes --> H[Server list ready]
+    D --> H
+
+    H --> I{For each server}
+
+    I --> J[Test-Connection\nICMP ping · 2 s timeout]
+    J --> K{Online?}
+    K -- No --> L[Log WARN Offline\nAdd to FailedServers\nSkip server]
+    L --> I
+
+    K -- Yes --> M[Try New-CimSession\nWSMan / WinRM · 30 s timeout]
+    M --> N{WinRM\nsucceeded?}
+    N -- Yes --> O[winRmWorks = true\nGet-CimInstance Win32_Service]
+    N -- No --> P[Log WARN: DCOM fallback\nNew-CimSession -Protocol DCOM\nGet-CimInstance Win32_Service\nwinRmWorks = false]
+
+    O --> Q[Filter non-standard\nservice accounts]
+    P --> Q
+
+    Q --> R{serviceRows > 0?}
+    R -- Yes --> S[Export-Csv\nServerName_Services.csv\nTrack path in ServiceCsvPaths]
+    R -- No --> T[Log: no non-standard\nservice accounts]
+
+    S --> U{winRmWorks?}
+    T --> U
+
+    U -- No --> V[Log WARN: task query\nskipped — DCOM only]
+    U -- Yes --> W[Invoke-Command\nGet-ScheduledTask\nExclude folders + name prefixes]
+    W --> X[Filter non-standard\ntask accounts]
+    X --> Y{taskRows > 0?}
+    Y -- Yes --> Z2[Export-Csv\nServerName_ScheduledTasks.csv\nTrack path in TaskCsvPaths]
+    Y -- No --> AA[Log: no non-standard\ntask accounts]
+
+    Z2 --> BB[Remove-CimSession]
+    AA --> BB
+    V --> BB
+
+    BB --> I
+    I -- Done --> CC{Any CSV files\nproduced?}
+
+    CC -- No --> DD[Log WARN: no CSV\nSkip Excel export]
+    CC -- Yes --> EE[Import all tracked CSVs\nExport-Excel\nSheet: Services]
+    EE --> FF{TaskCsvPaths\nnot empty?}
+    FF -- Yes --> GG[Export-Excel -Append\nSheet: ScheduledTasks]
+    FF -- No --> HH
+    GG --> HH[Log: Excel saved]
+
+    DD --> II{FailedServers > 0?}
+    HH --> II
+    II -- Yes --> JJ[Write FailedServers.txt\nfor retry with -ComputerList]
+    II -- No --> KK[Log summary\nOnline · Offline · Errors]
+    JJ --> KK
+
+    KK --> ZZ([End])
+```
+
 ## Parameters
 
 | Parameter      | Type   | Mandatory | Default                | Description                                                         |

@@ -132,6 +132,40 @@ Each evaluated account/group combination emits a `PSCustomObject`:
 7. #region Verify LSA user-right assignments — secedit check: group SID vs privilege line
 ```
 
+```mermaid
+flowchart TD
+    A([Start]) --> B[Initialise log file\n in LogDirectory]
+    B --> C[Discover services\nGet-Service SQL*\nGet-CimInstance Win32_Service]
+    C --> D{SQL named instances\nfound?}
+    D -- No --> E[Log: no instances found\nRun log cleanup]
+    E --> Z([Exit 0])
+    D -- Yes --> F[Collect SQL Engine accounts\nSQL Agent accounts\nSSIS accounts\nAll NT Service virtual accounts]
+    F --> G[Ensure groups exist\nCreate missing local groups]
+    G --> H{For each account\nin each target group}
+    H --> I{Already a\nmember?}
+    I -- Yes --> J[Log AlreadyMember\nEmit result object]
+    I -- No --> K{-WhatIf?}
+    K -- Yes --> L[Log WouldAdd\nEmit WouldAdd result]
+    K -- No --> M[Add-LocalGroupMember]
+    M --> N{Success?}
+    N -- Yes --> O[Update MemberCache\nLog Added\nEmit Added result]
+    N -- No --> P[Log WARN Failed\nEmit Failed result]
+    J --> H
+    L --> H
+    O --> H
+    P --> H
+    H -- Done --> Q[Remove-OldLogs\nDelete logs older than 30 days]
+    Q --> R[Verify LSA rights\nsecedit /export]
+    R --> S{For each group:\nSID in privilege line?}
+    S -- Yes --> T[Log INFO: OK]
+    S -- No --> U[Log WARN: LSA GAP]
+    T --> S
+    U --> S
+    S -- Done --> V{Any Failed\nresults?}
+    V -- Yes --> W([Exit 1])
+    V -- No --> Z
+```
+
 ## LSA Verification
 
 After memberships are set, the script calls `secedit /export` and parses the `[Privilege Rights]` section to verify each local group is wired to its expected Windows privilege:

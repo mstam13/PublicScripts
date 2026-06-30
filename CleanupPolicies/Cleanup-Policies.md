@@ -94,6 +94,48 @@ Install-Module -Name ImportExcel -Scope CurrentUser
    that would have broken an XML-parsing approach.
 5. **Export** — Results are written to Excel (two worksheets) or CSV (two files).
 
+```mermaid
+flowchart TD
+    A([Start]) --> B[Initialise log file\nLog\YYYYMMDD_HHmmss_Domain_Cleanup-Policies.log]
+    B --> C[Import modules\nGroupPolicy · ActiveDirectory · ImportExcel]
+    C --> D[Get-AllGpoLink\nRead gpLink attribute from\ndomain root · all OUs · AD Sites]
+    D --> E[Build GUID → containers\nlookup table]
+    E --> F[Get-GPO -All\nRetrieve every GPO in domain]
+    F --> G{For each GPO}
+
+    G --> H{GUID in\nlink table?}
+    H -- No --> I[Flag as Unlinked\nAdd to unlinked list]
+    H -- Yes --> J[LinkedTo = container DNs]
+
+    I --> K[Get-GPPermission -All]
+    J --> K
+
+    K --> L{Any ACE with\nPermission = GpoApply?}
+    L -- No --> M[Flag HasApplyAce = False\nAdd to noApplyAce list\nLog NoApplyACE]
+    L -- Yes --> N[HasApplyAce = True\nLog HasApplyACE]
+    L -- Error --> O[Log WARN\nAssume HasApplyAce = True]
+
+    M --> G
+    N --> G
+    O --> G
+
+    G -- Done --> P[Log summary counts]
+    P --> Q{ImportExcel\navailable?}
+
+    Q -- Yes --> R{Any results?}
+    R -- Yes --> S[Export-Excel\nWorksheet Unlinked\nWorksheet NoApplyACE]
+    R -- No --> T[Log WARN: no unused GPOs\nNo file written]
+
+    Q -- No --> U[Log WARN: falling back to CSV]
+    U --> V{Any results?}
+    V -- Yes --> W[Export-Csv\n_Unlinked.csv\n_NoApplyACE.csv]
+    V -- No --> T
+
+    S --> Z([End])
+    W --> Z
+    T --> Z
+```
+
 ## Version history
 
 | Version | Date | Author | Notes |

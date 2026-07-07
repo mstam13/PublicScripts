@@ -445,7 +445,7 @@ if ($CompareSettings -and $detailRows.Count -gt 0) {
         Where-Object { $_.LinkEnabled } |
         Group-Object -Property ContainerDN, Area, SettingName |
         Where-Object {
-            ($_.Group | Select-Object -ExpandProperty GPOName -Unique).Count -gt 1
+            @($_.Group | Select-Object -ExpandProperty GPOName -Unique).Count -gt 1
         }
 
     foreach ($grp in @($conflictGroups)) {

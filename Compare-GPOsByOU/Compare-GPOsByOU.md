@@ -1,13 +1,15 @@
 ﻿# Compare-GPOsByOU.ps1
 
-Reports all Group Policy Objects linked to each Organizational Unit (and the domain
-root), including **WMI filter name and WQL query**, to support side-by-side GPO
-comparison and policy review across the domain.
+Reports all Group Policy Objects linked to each Organizational Unit
+(and the domain root), including **WMI filter name and WQL query**,
+to support side-by-side GPO comparison and policy review across the
+domain.
 
 ## Synopsis
 
 ```powershell
-.\Compare-GPOsByOU.ps1 [-Domain <string>] [-OutputPath <string>] [-IncludeAll]
+.\Compare-GPOsByOU.ps1 [-Domain <string>] [-OutputPath <string>]
+                       [-SearchBase <string>] [-IncludeAll] [-CompareSettings]
 ```
 
 ## Parameters
@@ -16,15 +18,19 @@ comparison and policy review across the domain.
 | --- | --- | --- | --- | --- |
 | `Domain` | String | No | `$env:USERDNSDOMAIN` | FQDN of the AD domain to query |
 | `OutputPath` | String | No | Script directory | Directory where the report is written |
+| `SearchBase` | String | No | — (entire domain) | DN of the OU to use as the scan root; only that OU and its descendants are included |
 | `IncludeAll` | Switch | No | — | Also include containers with no linked GPOs in the Summary worksheet |
+| `CompareSettings` | Switch | No | — | Fetch the full GPO settings report for every linked GPO and add Settings and Conflicts worksheets |
 
 ## Output
 
 | File | When | Description |
 | --- | --- | --- |
-| `YYYY-MM-dd_<Domain>_Compare-GPOsByOU.xlsx` | ImportExcel available | Two-worksheet workbook |
+| `YYYY-MM-dd_<Domain>_Compare-GPOsByOU.xlsx` | ImportExcel available | Up to four-worksheet workbook |
 | `YYYY-MM-dd_<Domain>_Compare-GPOsByOU_GPOsByOU.csv` | Fallback | One row per GPO link per container |
 | `YYYY-MM-dd_<Domain>_Compare-GPOsByOU_Summary.csv` | Fallback | One row per container with GPO count |
+| `YYYY-MM-dd_<Domain>_Compare-GPOsByOU_Settings.csv` | Fallback + `-CompareSettings` | One row per configured setting |
+| `YYYY-MM-dd_<Domain>_Compare-GPOsByOU_Conflicts.csv` | Fallback + `-CompareSettings` | Conflicting settings only |
 | `Log\YYYYMMDD_HHmmss_<Domain>_Compare-GPOsByOU.log` | Always | Timestamped run log |
 
 ### GPOsByOU worksheet columns
@@ -93,6 +99,24 @@ Install-Module -Name ImportExcel -Scope CurrentUser
 .\Compare-GPOsByOU.ps1 -Domain contoso.com -OutputPath C:\Reports
 ```
 
+### Scope the scan to a specific OU subtree
+
+```powershell
+.\Compare-GPOsByOU.ps1 -SearchBase 'OU=Offices,DC=contoso,DC=com'
+```
+
+### Compare GPO settings and detect conflicts
+
+```powershell
+.\Compare-GPOsByOU.ps1 -CompareSettings
+```
+
+### Combine subtree scan with settings comparison
+
+```powershell
+.\Compare-GPOsByOU.ps1 -SearchBase 'OU=IT,DC=contoso,DC=com' -CompareSettings
+```
+
 ### Include OUs with no linked GPOs in the Summary sheet
 
 ```powershell
@@ -101,24 +125,41 @@ Install-Module -Name ImportExcel -Scope CurrentUser
 
 ## How it works
 
-1. **GPO pre-load** — Calls `Get-GPO -All` and stores every GPO in a hashtable keyed
-   by GUID for fast lookup.
+1. **GPO pre-load** — Calls `Get-GPO -All` and stores every GPO in a
+   hashtable keyed by GUID for fast lookup.
 2. **WMI filter pre-load** — Reads all `msWMI-Som` objects from
-   `CN=SOM,CN=WMIPolicy,CN=System,<DomainDN>`. The `msWMI-Parm2` attribute holds
-   the WMI namespace and WQL query separated by a semicolon. Results are stored in a
-   hashtable keyed by filter display name (`msWMI-Name`).
+   `CN=SOM,CN=WMIPolicy,CN=System,<DomainDN>`. The `msWMI-Parm2`
+   attribute holds the WMI namespace and WQL query separated by a
+   semicolon. Results are stored in a hashtable keyed by filter
+   display name (`msWMI-Name`).
 3. **Container enumeration** — Retrieves the domain root and every OU via
    `Get-ADOrganizationalUnit -Filter *`.
 4. **Link collection** — Calls `Get-GPInheritance` per container. This returns
-   `GpoLinks` with accurate link order, enabled, and enforced flags — avoiding the
-   manual parsing of the raw `gpLink` attribute (which encodes flags as bit fields
-   and orders links right-to-left with no link numbers).
-5. **WMI filter resolution** — For each linked GPO, reads `$gpo.WmiFilter.Name` and
-   looks the name up in the pre-loaded WMI filter table to attach the description and
-   WQL query.
-6. **Export** — All rows are written to Excel (two worksheets with AutoFilter,
-   AutoSize, and frozen header row) or to two CSV files when ImportExcel is
-   unavailable.
+   `GpoLinks` with accurate link order, enabled, and enforced flags —
+   avoiding the manual parsing of the raw `gpLink` attribute (which
+   encodes flags as bit fields and orders links right-to-left).
+5. **WMI filter resolution** — For each linked GPO, reads
+   `$gpo.WmiFilter.Name` and looks it up in the pre-loaded WMI filter
+   table to attach the description and WQL query.
+6. **Settings extraction** (only when `-CompareSettings` is specified) —
+   Calls `Get-GPOReport -ReportType Xml` once per unique linked GPO and
+   parses the XML using namespace-agnostic `local-name()` XPath queries.
+   Extracts:
+   - **Administrative Templates** — every `<Policy>` element (name, state,
+     category) from Computer and User sections.
+   - **Security Settings – Account Policies** — password, account lockout,
+     and Kerberos policy values.
+   - **Security Settings – User Rights Assignment** — right name and
+     assigned members.
+   - **Security Settings – Audit Policy** — subcategory name and value.
+   - **Scripts** — Startup, Shutdown, Logon, and Logoff script paths.
+7. **Conflict detection** — Groups the Settings rows by
+   `ContainerDN + Area + SettingName`. Any setting that appears in two
+   or more *enabled* GPOs linked to the same container is flagged as a
+   conflict and written to the Conflicts worksheet.
+8. **Export** — All rows are written to Excel (two to four worksheets
+   with AutoFilter, AutoSize, and frozen header row) or to CSV files
+   when ImportExcel is unavailable.
 
 ```mermaid
 flowchart TD
@@ -153,10 +194,12 @@ flowchart TD
 ## Notes
 
 - WMI filter queries are stored in `msWMI-Parm2` in the format
-  `<namespace>;<WQL query>`, e.g. `root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE ...`.
+  `<namespace>;<WQL query>`, e.g.:
+  `root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE ...`
   The full string is written to `WMIFilterQuery` as-is.
-- `Get-GPInheritance` is called once per container, which means one LDAP round-trip
-  per OU. For large domains (hundreds of OUs) the script may take several minutes.
+- `Get-GPInheritance` is called once per container — one LDAP round-trip
+  per OU. For large domains (hundreds of OUs) the script may take
+  several minutes.
 - If a GPO link references a deleted GPO (orphaned link), `GPOStatus` is set to
   `Unknown` and all GPO detail columns are blank; a warning is logged.
 - If access to the WMI filter container is denied, all `WMIFilter*` columns are
@@ -166,4 +209,6 @@ flowchart TD
 
 | Version | Date | Author | Changes |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-07 | M. Stam | Added `-CompareSettings`: GPO settings extraction and conflict detection |
+| 1.1.0 | 2026-07-07 | M. Stam | Added `-SearchBase` parameter to scope scanning to an OU subtree |
 | 1.0.0 | 2026-07-02 | M. Stam | Initial release |

@@ -429,6 +429,7 @@ if ($CompareSettings -and $detailRows.Count -gt 0) {
                 LinkEnabled   = $row.LinkEnabled
                 LinkEnforced  = $row.LinkEnforced
                 GPOName       = $row.GPOName
+                WMIFilterName = $row.WMIFilterName
                 Area          = $setting.Area
                 ExtensionType = $setting.ExtensionType
                 Category      = $setting.Category

@@ -160,8 +160,7 @@ Install-Module -Name ImportExcel -Scope CurrentUser
 
 ```powershell
 .\Compare-GPOsByOU.ps1 -IncludeAll
-```
-### Pin queries to a specific domain controller
+```### Pin queries to a specific domain controller
 
 ```powershell
 .\.Compare-GPOsByOU.ps1 -Domain contoso.com -DomainController dc01.contoso.com
@@ -173,6 +172,7 @@ Install-Module -Name ImportExcel -Scope CurrentUser
 $data = .\.Compare-GPOsByOU.ps1 -PassThru
 $data.Conflicts | Where-Object { $_.ExtensionType -eq 'Administrative Templates' }
 ```
+
 ## How it works
 
 1. **GPO pre-load** — Calls `Get-GPO -All` and stores every GPO in a
@@ -203,6 +203,7 @@ $data.Conflicts | Where-Object { $_.ExtensionType -eq 'Administrative Templates'
    On **PowerShell 7+**, reports are fetched in parallel (up to 8 concurrent
    requests via `ForEach-Object -Parallel`); on PS 5.1 the fetch is sequential.
    Extracts the following setting types from both Computer and User sections:
+
    - **Administrative Templates** — every `<Policy>` element (name, state, category).
    - **Security Settings – Account Policies** — password, account lockout, and Kerberos policy values.
    - **Security Settings – User Rights Assignment** — right name and assigned members.
@@ -212,6 +213,7 @@ $data.Conflicts | Where-Object { $_.ExtensionType -eq 'Administrative Templates'
    - **Security Settings – System Services** — service name and startup mode (`<NTService>` nodes).
    - **Scripts** — Startup, Shutdown, Logon, and Logoff script paths.
    - **Windows Firewall Rules** — name, profile, action, and active state from `<FirewallRules><Rule>` nodes.
+
 8. **Conflict detection** — Groups the Settings rows by
    `ContainerDN + Area + SettingName`. A conflict is flagged only when
    the GPO link is enabled **and** the relevant half (Computer or User

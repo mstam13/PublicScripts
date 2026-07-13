@@ -90,8 +90,8 @@
     Returns the result data to the pipeline for further filtering.
 .NOTES
     Author      : M. Stam
-    Date        : 2026-07-10
-    Version     : 1.3.0
+    Date        : 2026-07-13
+    Version     : 1.4.0
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -110,6 +110,12 @@
       root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%"
 
     Version history:
+      1.4.0  2026-07-13  M. Stam  Optimised: parallel Get-GPInheritance on PS7+;
+                                   elapsed-time logging per phase; UTF-8 NoBOM log
+                                   writer; Dictionary<string,object> + TryGetValue;
+                                   HashSet for orphaned lookup; GpoStatus cached per
+                                   link; SearchBase validation merged into enumeration;
+                                   removed redundant -Properties 'Name'.
       1.3.0  2026-07-10  M. Stam  Added -DomainController, -PassThru; Write-Progress;
                                    orphaned GPO detection; Security Options, Restricted
                                    Groups, System Services, Windows Firewall rules in
@@ -168,10 +174,12 @@ $LogDir  = Join-Path $script:ScriptRoot 'Log'
 if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogDir }
 $LogFile = Join-Path $LogDir "$(Get-Date -Format 'yyyyMMdd_HHmmss')_${Domain}_Compare-GPOsByOU.log"
 
+$script:LogEncoding = [System.Text.UTF8Encoding]::new($false)  # UTF-8 without BOM
+
 function Write-ScriptLog {
     param ([string] $Message, [string] $Level = 'INFO')
     $entry = '[{0}] [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-    $entry | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    [System.IO.File]::AppendAllLines($LogFile, [string[]] @($entry), $script:LogEncoding)
     if ($Level -eq 'ERROR')    { Write-Error   $Message }
     elseif ($Level -eq 'WARN') { Write-Warning $Message }
     else { Write-Information -MessageData $entry -InformationAction Continue }
@@ -356,7 +364,8 @@ function Get-GpoSetting {
 
 #region Main
 # Resolve the server target used for all AD and GPO calls
-$adServer = if ($PSBoundParameters.ContainsKey('DomainController')) { $DomainController } else { $Domain }
+$adServer  = if ($PSBoundParameters.ContainsKey('DomainController')) { $DomainController } else { $Domain }
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 Write-ScriptLog "Starting GPO-by-OU comparison for domain: $Domain (server: $adServer)"
 
@@ -369,9 +378,10 @@ foreach ($mod in 'GroupPolicy', 'ActiveDirectory') {
     }
 }
 
-# Pre-load all GPOs into a lookup hashtable (key = GUID string, lowercase without braces)
+# Pre-load all GPOs — Dictionary<string,object> enables single-lookup TryGetValue
 Write-ScriptLog 'Retrieving all GPOs...'
-$gpoTable = @{}
+$gpoTable = [System.Collections.Generic.Dictionary[string, object]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
 foreach ($g in Get-GPO -All -Domain $Domain -Server $adServer) {
     $gpoTable[$g.Id.ToString()] = $g
 }
@@ -409,27 +419,28 @@ try {
 catch {
     Write-ScriptLog "Could not load WMI filters from '$domainDN': $_" -Level 'WARN'
 }
+Write-ScriptLog "Pre-load phase complete. [$($stopwatch.Elapsed.ToString('hh\:mm\:ss\.fff'))]"
+$stopwatch.Restart()
 
 # Build target list
 $targets = [System.Collections.Generic.List[hashtable]]::new()
 
 if ($PSBoundParameters.ContainsKey('SearchBase')) {
-    # Validate that the SearchBase OU exists
+    # Enumerate SearchBase OU and all descendants; the call throws if the OU does not exist,
+    # making a separate existence check redundant.
     Write-ScriptLog "Enumerating containers (scoped to: $SearchBase)..."
     try {
-        $null = Get-ADOrganizationalUnit -Identity $SearchBase -Server $adServer -ErrorAction Stop
+        foreach ($ou in (Get-ADOrganizationalUnit -Filter * -SearchBase $SearchBase `
+                -Server $adServer -ErrorAction Stop)) {
+            $targets.Add(@{
+                Name              = $ou.Name
+                DistinguishedName = $ou.DistinguishedName
+                GPITarget         = $ou.DistinguishedName
+            })
+        }
     }
     catch {
         Write-ScriptLog "SearchBase '$SearchBase' not found or inaccessible: $_" -Level 'ERROR'
-    }
-
-    # Include the SearchBase OU itself and all descendants (-SearchScope Subtree is the default)
-    foreach ($ou in (Get-ADOrganizationalUnit -Filter * -SearchBase $SearchBase -Server $adServer)) {
-        $targets.Add(@{
-            Name              = $ou.Name
-            DistinguishedName = $ou.DistinguishedName
-            GPITarget         = $ou.DistinguishedName
-        })
     }
 }
 else {
@@ -443,7 +454,8 @@ else {
         GPITarget         = $Domain
     })
 
-    foreach ($ou in (Get-ADOrganizationalUnit -Filter * -Properties 'Name' -Server $adServer)) {
+    # Name is a default attribute; no -Properties needed
+    foreach ($ou in (Get-ADOrganizationalUnit -Filter * -Server $adServer)) {
         $targets.Add(@{
             Name              = $ou.Name
             DistinguishedName = $ou.DistinguishedName
@@ -451,30 +463,64 @@ else {
         })
     }
 }
-Write-ScriptLog "Found $($targets.Count) containers to process."
+$totalTargets = $targets.Count
+Write-ScriptLog "Found $totalTargets containers to process."
 
-$detailRows     = [System.Collections.Generic.List[PSCustomObject]]::new()
-$summaryRows    = [System.Collections.Generic.List[PSCustomObject]]::new()
-$totalTargets   = $targets.Count
+$detailRows  = [System.Collections.Generic.List[PSCustomObject]]::new()
+$summaryRows = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+# Phase 1: Fetch GPO inheritance — parallel on PS7+, sequential on PS5
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    Write-ScriptLog '  Using parallel inheritance fetching (PS 7+).'
+    Write-Progress -Activity 'Fetching GPO inheritance' -Status 'Running in parallel...' -PercentComplete -1
+    $inheritanceResults = $targets | ForEach-Object -Parallel {
+        $t     = $_
+        $links = @()
+        try {
+            $inh = Get-GPInheritance -Target $t.GPITarget `
+                -Domain $using:Domain -Server $using:adServer -ErrorAction Stop
+            if ($null -ne $inh.GpoLinks) { $links = @($inh.GpoLinks) }
+        }
+        catch {
+            Write-Warning "Could not get GPO inheritance for '$($t.DistinguishedName)': $_"
+        }
+        [PSCustomObject]@{ Target = $t; Links = $links }
+    } -ThrottleLimit 8 -InitializationScript { Import-Module GroupPolicy, ActiveDirectory }
+    Write-Progress -Activity 'Fetching GPO inheritance' -Completed
+}
+else {
+    $count = 0
+    $inheritanceResults = foreach ($t in $targets) {
+        $count++
+        Write-Progress -Activity "Fetching GPO inheritance ($count / $totalTargets)" `
+            -Status $t.DistinguishedName `
+            -PercentComplete ([int](($count / $totalTargets) * 100))
+        $links = @()
+        try {
+            $inh = Get-GPInheritance -Target $t.GPITarget `
+                -Domain $Domain -Server $adServer -ErrorAction Stop
+            if ($null -ne $inh.GpoLinks) { $links = @($inh.GpoLinks) }
+        }
+        catch {
+            Write-ScriptLog "Could not get GPO inheritance for '$($t.DistinguishedName)': $_" -Level 'WARN'
+        }
+        [PSCustomObject]@{ Target = $t; Links = $links }
+    }
+    Write-Progress -Activity 'Fetching GPO inheritance' -Completed
+}
+Write-ScriptLog "Inheritance fetch complete. [$($stopwatch.Elapsed.ToString('hh\:mm\:ss\.fff'))]"
+$stopwatch.Restart()
+
+# Phase 2: Resolve GPO/WMI details and build rows (sequential — uses shared lookup tables)
 $processedCount = 0
-
-foreach ($target in $targets) {
+foreach ($result in $inheritanceResults) {
     $processedCount++
-    Write-Progress -Activity "Scanning containers ($processedCount / $totalTargets)" `
-        -Status $target.DistinguishedName `
+    Write-Progress -Activity "Building report rows ($processedCount / $totalTargets)" `
+        -Status $result.Target.DistinguishedName `
         -PercentComplete ([int](($processedCount / $totalTargets) * 100))
 
-    Write-ScriptLog "Processing: $($target.DistinguishedName)"
-
-    $links = @()
-    try {
-        $inheritance = Get-GPInheritance -Target $target.GPITarget -Domain $Domain -Server $adServer -ErrorAction Stop
-        $links = $inheritance.GpoLinks
-    }
-    catch {
-        Write-ScriptLog "Could not get GPO inheritance for '$($target.DistinguishedName)': $_" -Level 'WARN'
-    }
-
+    $target      = $result.Target
+    $links       = $result.Links
     $linkedCount = @($links).Count
 
     if ($IncludeAll -or $linkedCount -gt 0) {
@@ -487,7 +533,8 @@ foreach ($target in $targets) {
 
     foreach ($link in $links) {
         $gpoGuidStr = $link.GpoId.ToString()
-        $gpo        = if ($gpoTable.ContainsKey($gpoGuidStr)) { $gpoTable[$gpoGuidStr] } else { $null }
+        $gpo        = $null
+        $null       = $gpoTable.TryGetValue($gpoGuidStr, [ref]$gpo)
 
         $wmiFilterName  = $null
         $wmiFilterDesc  = $null
@@ -501,9 +548,11 @@ foreach ($target in $targets) {
             }
         }
 
-        $gpoStatus       = if ($null -ne $gpo) { $gpo.GpoStatus.ToString() } else { 'Unknown' }
-        $computerEnabled = if ($null -ne $gpo) { $gpo.GpoStatus.ToString() -notin @('ComputerSettingsDisabled', 'AllSettingsDisabled') } else { $null }
-        $userEnabled     = if ($null -ne $gpo) { $gpo.GpoStatus.ToString() -notin @('UserSettingsDisabled', 'AllSettingsDisabled') } else { $null }
+        # Cache GpoStatus string — used three times per link
+        $statusStr       = if ($null -ne $gpo) { $gpo.GpoStatus.ToString() } else { $null }
+        $gpoStatus       = if ($null -ne $statusStr) { $statusStr } else { 'Unknown' }
+        $computerEnabled = if ($null -ne $statusStr) { $statusStr -notin @('ComputerSettingsDisabled', 'AllSettingsDisabled') } else { $null }
+        $userEnabled     = if ($null -ne $statusStr) { $statusStr -notin @('UserSettingsDisabled', 'AllSettingsDisabled') } else { $null }
 
         $detailRows.Add([PSCustomObject]@{
             ContainerName           = $target.Name
@@ -525,7 +574,7 @@ foreach ($target in $targets) {
         })
     }
 }
-Write-Progress -Activity 'Scanning containers' -Completed
+Write-Progress -Activity 'Building report rows' -Completed
 
 # Sort for a consistent, readable spreadsheet
 $detailRows = [System.Collections.Generic.List[PSCustomObject]] @(
@@ -535,24 +584,27 @@ $detailRows = [System.Collections.Generic.List[PSCustomObject]] @(
 Write-ScriptLog "Total GPO links found : $($detailRows.Count)"
 Write-ScriptLog "Containers with GPOs  : $(($summaryRows | Where-Object { $_.LinkedGPOCount -gt 0 }).Count)"
 
-# Detect orphaned GPOs (exist in the domain but linked nowhere in the scanned scope)
-$linkedGpoGuids = @{}
-foreach ($row in $detailRows) { $linkedGpoGuids[$row.GPOId.Trim('{', '}').ToLower()] = $true }
+# Detect orphaned GPOs — HashSet with OrdinalIgnoreCase for O(1) membership tests
+$linkedGpoGuids = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($row in $detailRows) { $null = $linkedGpoGuids.Add($row.GPOId.Trim('{', '}')) }
 
 $orphanedRows = [System.Collections.Generic.List[PSCustomObject]]::new()
-foreach ($kvp in $gpoTable.GetEnumerator()) {
-    if (-not $linkedGpoGuids.ContainsKey($kvp.Key.ToLower())) {
+foreach ($kv in $gpoTable.GetEnumerator()) {
+    if (-not $linkedGpoGuids.Contains($kv.Key)) {
+        $g = $kv.Value
         $orphanedRows.Add([PSCustomObject]@{
-            GPOName             = $kvp.Value.DisplayName
-            GPOId               = $kvp.Value.Id.ToString('B').ToUpper()
-            GPOStatus           = $kvp.Value.GpoStatus.ToString()
-            GPOCreationTime     = $kvp.Value.CreationTime
-            GPOModificationTime = $kvp.Value.ModificationTime
-            GPODescription      = $kvp.Value.Description
+            GPOName             = $g.DisplayName
+            GPOId               = $g.Id.ToString('B').ToUpper()
+            GPOStatus           = $g.GpoStatus.ToString()
+            GPOCreationTime     = $g.CreationTime
+            GPOModificationTime = $g.ModificationTime
+            GPODescription      = $g.Description
         })
     }
 }
 Write-ScriptLog "Unlinked (orphaned) GPOs : $($orphanedRows.Count)"
+Write-ScriptLog "Row-building phase complete. [$($stopwatch.Elapsed.ToString('hh\:mm\:ss\.fff'))]"
+$stopwatch.Restart()
 #endregion
 
 #region Settings comparison
@@ -648,6 +700,8 @@ if ($CompareSettings -and $detailRows.Count -gt 0) {
     }
     Write-ScriptLog "Conflicting setting rows : $($conflictRows.Count)"
 }
+Write-ScriptLog "Settings phase complete. [$($stopwatch.Elapsed.ToString('hh\:mm\:ss\.fff'))]"
+$stopwatch.Restart()
 #endregion
 
 #region Export

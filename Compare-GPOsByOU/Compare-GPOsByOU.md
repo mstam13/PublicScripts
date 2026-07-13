@@ -160,7 +160,9 @@ Install-Module -Name ImportExcel -Scope CurrentUser
 
 ```powershell
 .\Compare-GPOsByOU.ps1 -IncludeAll
-```### Pin queries to a specific domain controller
+```
+
+### Pin queries to a specific domain controller
 
 ```powershell
 .\.Compare-GPOsByOU.ps1 -Domain contoso.com -DomainController dc01.contoso.com
@@ -176,27 +178,29 @@ $data.Conflicts | Where-Object { $_.ExtensionType -eq 'Administrative Templates'
 ## How it works
 
 1. **GPO pre-load** — Calls `Get-GPO -All` and stores every GPO in a
-   hashtable keyed by GUID for fast lookup.
+   `Dictionary<string,object>` keyed by GUID for O(1) `TryGetValue` lookups.
 2. **WMI filter pre-load** — Reads all `msWMI-Som` objects from
    `CN=SOM,CN=WMIPolicy,CN=System,<DomainDN>`. The `msWMI-Parm2`
    attribute holds the WMI namespace and WQL query. Filters with a missing
    display name are skipped with a warning; duplicate display names are also
    warned. Results are stored keyed by `msWMI-Name`.
 3. **Container enumeration** — Retrieves the domain root and every OU via
-   `Get-ADOrganizationalUnit -Filter *`. A `Write-Progress` bar shows
-   real-time progress during the scan loop.
-4. **Link collection** — Calls `Get-GPInheritance` per container. This returns
-   `GpoLinks` with accurate link order, enabled, and enforced flags —
-   avoiding the manual parsing of the raw `gpLink` attribute (which
-   encodes flags as bit fields and orders links right-to-left).
+   `Get-ADOrganizationalUnit -Filter *` and builds the ordered target list.
+4. **Inheritance fetch** — Calls `Get-GPInheritance` per container to retrieve
+   `GpoLinks` with accurate link order, enabled, and enforced flags (avoiding
+   manual parsing of the raw `gpLink` attribute). On **PowerShell 7+** all
+   containers are queried in parallel (up to 8 concurrent requests via
+   `ForEach-Object -Parallel`); on PS 5.1 the fetch is sequential with a
+   `Write-Progress` bar.
 5. **WMI filter resolution** — For each linked GPO, reads
    `$gpo.WmiFilter.Name` and looks it up in the pre-loaded WMI filter
    table. A null-name guard prevents errors when the filter object is
    present but its name attribute is missing.
-6. **Sort & orphaned detection** — After the loop, detail rows are sorted
-   by `ContainerDN, LinkOrder` for a consistent spreadsheet layout.
-   GPOs present in the pre-loaded table but not referenced by any collected
-   link are written to the **Orphaned** worksheet.
+6. **Sort & orphaned detection** — Detail rows are sorted by
+   `ContainerDN, LinkOrder` for a consistent spreadsheet layout. A
+   `HashSet<string>` with case-insensitive comparison is built from the
+   linked GUID set; GPOs present in the pre-loaded Dictionary but absent
+   from the set are written to the **Orphaned** worksheet.
 7. **Settings extraction** (only when `-CompareSettings` is specified) —
    Calls `Get-GPOReport -ReportType Xml` once per unique linked GPO and
    parses the XML using namespace-agnostic `local-name()` XPath queries.
@@ -227,19 +231,23 @@ $data.Conflicts | Where-Object { $_.ExtensionType -eq 'Administrative Templates'
 flowchart TD
     A([Start]) --> B[Initialise log file\nLog\YYYYMMDD_HHmmss_Domain_Compare-GPOsByOU.log]
     B --> C[Import modules\nGroupPolicy · ActiveDirectory]
-    C --> D[Get-GPO -All\nBuild GUID → GPO lookup table]
+    C --> D[Get-GPO -All\nBuild GUID → GPO lookup Dictionary]
     D --> E[Get-ADObject msWMI-Som\nBuild name → WMI filter lookup table\nnull-name guard · duplicate-name warning]
-    E --> F[Get-ADOrganizationalUnit -Filter *\nBuild container list\ndomain root + all OUs]
-    F --> G{For each container\nWrite-Progress}
+    E --> F[Get-ADOrganizationalUnit -Filter *\nBuild container target list\ndomain root + all OUs]
+    F --> PS{PS 7+?}
 
-    G --> H[Get-GPInheritance\nRetrieve GpoLinks\norder · enabled · enforced]
-    H --> I{For each GpoLink}
+    PS -- Yes --> PA[ForEach-Object -Parallel\nThrottleLimit 8\nGet-GPInheritance per container]
+    PS -- No --> PB[Sequential + Write-Progress\nGet-GPInheritance per container]
+    PA --> G
+    PB --> G
 
-    I --> J[Look up GPO in GPO table\nGPOStatus · Created · Modified · Description]
+    G[For each inheritance result\nWrite-Progress] --> I{For each GpoLink}
+
+    I --> J[TryGetValue in GPO Dictionary\nGPOStatus · Created · Modified · Description]
     J --> K{GPO has\nWmiFilter?}
     K -- Yes --> L[Look up WMI filter table\nName · Description · Query]
     K -- No --> M[WMIFilter fields = blank]
-    L --> N[Build detail row]
+    L --> N[Build detail row\ncache GpoStatus string]
     M --> N
 
     N --> I
@@ -247,8 +255,8 @@ flowchart TD
     O --> G
 
     G -- Done --> P[Sort detail rows\nContainerDN · LinkOrder]
-    P --> Q[Orphaned detection\nGPOs in domain not in any detail row]
-    Q --> R[Log totals]
+    P --> Q[HashSet orphaned detection\nGPOs in domain not in any detail row]
+    Q --> R[Log totals + elapsed time per phase]
     R --> S{-CompareSettings?}
 
     S -- No --> T{ImportExcel\navailable?}
@@ -270,9 +278,11 @@ flowchart TD
   `<namespace>;<WQL query>`, e.g.:
   `root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE ...`
   The full string is written to `WMIFilterQuery` as-is.
-- `Get-GPInheritance` is called once per container — one LDAP round-trip
-  per OU. For large domains (hundreds of OUs) the script may take
-  several minutes. A `Write-Progress` bar shows real-time progress.
+- `Get-GPInheritance` is called once per container — one LDAP round-trip per
+  OU. On **PowerShell 7+** all inheritance queries run in parallel (up to
+  8 concurrent threads), significantly reducing runtime on large domains.
+  On PS 5.1 the fetch is sequential with a `Write-Progress` bar.
+  Elapsed time for each phase is written to the log.
 - If a GPO link references a deleted GPO (orphaned link), `GPOStatus` is set to
   `Unknown` and all GPO detail columns are blank; a warning is logged.
 - If access to the WMI filter container is denied, all `WMIFilter*` columns are
@@ -280,9 +290,12 @@ flowchart TD
 - **Orphaned GPO detection** is scoped to the containers actually scanned.
   When `-SearchBase` is used, a GPO linked only outside the subtree will
   appear in the Orphaned sheet even though it is linked elsewhere in the domain.
-- **Parallel report fetching** (`-CompareSettings` on PS 7+) runs up to
-  8 `Get-GPOReport` calls concurrently. Warnings from parallel runspaces
-  appear on the warning stream but are not written to the log file.
+- **Parallel fetching on PS 7+** applies to two independent phases:
+  (1) `Get-GPInheritance` per container during the main scan, and
+  (2) `Get-GPOReport` per GPO when `-CompareSettings` is active.
+  Both phases use up to 8 concurrent requests via `ForEach-Object -Parallel`.
+  Warnings from parallel runspaces appear on the warning stream but are
+  not written to the log file.
 - **`-DomainController`** should be specified in environments with many DCs
   or when running immediately after a GPO change, to ensure all queries are
   answered by the same replication source.
@@ -291,6 +304,7 @@ flowchart TD
 
 | Version | Date | Author | Changes |
 | --- | --- | --- | --- |
+| 1.4.0 | 2026-07-13 | M. Stam | Parallel `Get-GPInheritance` on PS 7+; elapsed-time logging per phase; UTF-8 NoBOM log writer; `Dictionary<string,object>` + `TryGetValue`; `HashSet<string>` for orphaned lookup; `GpoStatus` cached per link; `SearchBase` validation merged into enumeration; removed redundant `-Properties 'Name'` |
 | 1.3.0 | 2026-07-10 | M. Stam | Added `-DomainController`, `-PassThru`; `Write-Progress`; orphaned GPO detection; Security Options, Restricted Groups, System Services, Windows Firewall rules in `-CompareSettings`; improved conflict detection (respects Computer/User area); parallel report fetching on PS 7+; WMI filter null guard; fixed double-logging; `OutputPath` auto-create; sort before export |
 | 1.2.0 | 2026-07-07 | M. Stam | Added `-CompareSettings`: GPO settings extraction and conflict detection |
 | 1.1.0 | 2026-07-07 | M. Stam | Added `-SearchBase` parameter to scope scanning to an OU subtree |

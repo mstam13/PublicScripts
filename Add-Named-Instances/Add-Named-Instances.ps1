@@ -128,56 +128,7 @@ param(
 )
 
 #region Functions
-# Helper: writes a timestamped entry to the log file and the appropriate PowerShell stream.
-function Write-Log {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Message,
-        [Parameter()]
-        [ValidateSet('INFO', 'WARN', 'ERROR')]
-        [string]$Level = 'INFO'
-    )
-    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    $line      = "[$timestamp] [$Level] $Message"
-    Add-Content -Path $script:LogFile -Value $line -Encoding UTF8
-    switch ($Level) {
-        'WARN'  { Write-Warning $Message }
-        'ERROR' { Write-Verbose "ERROR: $Message" }  # throw follows; Write-Error would duplicate $Error
-        default { Write-Verbose $Message }
-    }
-}
-
-# Helper: removes log files for this script that are older than the specified retention period.
-function Remove-OldLogs {
-    [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$LogDirectory,
-        [Parameter()]
-        [ValidateRange(1, 3650)]
-        [int]$RetentionDays = 30
-    )
-    $cutoff = (Get-Date).AddDays(-$RetentionDays)
-    $old = Get-ChildItem -LiteralPath $LogDirectory -Filter 'Add-Named-Instances_*.log' -File -ErrorAction SilentlyContinue |
-           Where-Object { $_.LastWriteTime -lt $cutoff }
-    foreach ($file in $old) {
-        if ($PSCmdlet.ShouldProcess($file.FullName, 'Remove log file older than 30 days')) {
-            try {
-                Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop
-                Write-Log "Removed old log file '$($file.Name)'."
-            }
-            catch {
-                Write-Log -Level WARN "Could not remove old log file '$($file.Name)': $_"
-            }
-        }
-    }
-    if ($old.Count -gt 0) {
-        Write-Log "Log cleanup complete - $($old.Count) file(s) older than $RetentionDays days processed."
-    }
-}
+Import-Module (Join-Path $PSScriptRoot '..\Shared\PublicScripts.psm1') -Force
 
 # Helper: adds one account to one group and emits a structured result object.
 function Add-AccountToGroup {
@@ -200,23 +151,23 @@ function Add-AccountToGroup {
                 # Update the in-memory cache immediately so subsequent lookups for this
                 # account/group see the correct state and avoid duplicate-member errors.
                 $MemberCache[$Group] = @($MemberCache[$Group]) + [PSCustomObject]@{ Name = $Account }
-                Write-Log "Added '$Account' to '$Group'."
+                Write-ScriptLog "Added '$Account' to '$Group'."
                 [PSCustomObject]@{ Action = 'Added'; Account = $Account; Group = $Group }
             }
             catch {
-                Write-Log -Level WARN "Failed to add '$Account' to '$Group': $_"
+                Write-ScriptLog -Level WARN "Failed to add '$Account' to '$Group': $_"
                 [PSCustomObject]@{ Action = 'Failed'; Account = $Account; Group = $Group }
             }
         }
         else {
             # -WhatIf path: emit a result so the caller's list stays consistent (no $null entries).
-            Write-Log "WhatIf: would add '$Account' to '$Group'."
+            Write-ScriptLog "WhatIf: would add '$Account' to '$Group'."
             [PSCustomObject]@{ Action = 'WouldAdd'; Account = $Account; Group = $Group }
         }
     }
     else {
         # Account already present; log it and emit an object so the caller gets a complete picture.
-        Write-Log "Already member: '$Account' in '$Group'."
+        Write-ScriptLog "Already member: '$Account' in '$Group'."
         [PSCustomObject]@{ Action = 'AlreadyMember'; Account = $Account; Group = $Group }
     }
 }
@@ -227,12 +178,9 @@ function Add-AccountToGroup {
 $ErrorActionPreference = 'Stop'
 
 # Log file - written to $LogDirectory with a timestamp so each run produces a unique file.
-$logDir = $LogDirectory
-if (-not (Test-Path -LiteralPath $logDir)) {
-    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-}
-$script:LogFile = Join-Path $logDir ("Add-Named-Instances_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
-Write-Log "Script started on '$env:COMPUTERNAME'. Log: $($script:LogFile)"
+$logDir         = $LogDirectory
+$script:LogFile = Initialize-ScriptLog -LogDirectory $logDir -ScriptName 'Add-Named-Instances'
+Write-ScriptLog "Script started on '$env:COMPUTERNAME'. Log: $script:LogFile"
 
 # Target local security groups as defined by CIS hardening requirements for SQL Server.
 $AdjustMemoryGroup             = 'AdjustMemoryQuotasForAProcess'
@@ -254,7 +202,7 @@ try {
     $services = Get-Service -DisplayName '*SQL*' -ErrorAction Stop
 }
 catch {
-    Write-Log -Level ERROR "Get-Service failed while enumerating SQL services: $_"
+    Write-ScriptLog -Level ERROR "Get-Service failed while enumerating SQL services: $_"
     throw
 }
 
@@ -265,7 +213,7 @@ try {
                        Select-Object -ExpandProperty StartName
 }
 catch {
-    Write-Log -Level ERROR "Get-CimInstance failed while enumerating NT Service accounts: $_"
+    Write-ScriptLog -Level ERROR "Get-CimInstance failed while enumerating NT Service accounts: $_"
     throw
 }
 
@@ -299,12 +247,12 @@ $DTSInstances = $DTSInstances | Where-Object { $_ -and $_ -notin $skipAccounts }
 $namedInstanceAccounts = @(@($SQLInstances) + @($SQLAgentInstances) + @($DTSInstances))
 $ServiceAccounts = $ServiceAccounts | Where-Object { $namedInstanceAccounts -inotcontains $_ }
 
-Write-Log "Discovered SQL service accounts - Engine: $($SQLInstances.Count), Agent: $($SQLAgentInstances.Count), SSIS: $($DTSInstances.Count), Other: $($ServiceAccounts.Count)"
+Write-ScriptLog "Discovered SQL service accounts - Engine: $($SQLInstances.Count), Agent: $($SQLAgentInstances.Count), SSIS: $($DTSInstances.Count), Other: $($ServiceAccounts.Count)"
 
 # Exit early if no named instances were found — nothing to configure.
 if ($SQLInstances.Count -eq 0 -and $SQLAgentInstances.Count -eq 0 -and $DTSInstances.Count -eq 0 -and $ServiceAccounts.Count -eq 0) {
-    Write-Log -Level WARN 'No SQL Server named instances discovered. Nothing to do.'
-    Remove-OldLogs -LogDirectory $logDir -RetentionDays 30
+    Write-ScriptLog -Level WARN 'No SQL Server named instances discovered. Nothing to do.'
+    Remove-OldLog -LogDirectory $logDir -Filter '*Add-Named-Instances.log' -RetentionDays 30
     return
 }
 #endregion
@@ -318,10 +266,10 @@ foreach ($group in $allGroups) {
         if ($PSCmdlet.ShouldProcess($group, 'Create local group')) {
             try {
                 New-LocalGroup -Name $group -ErrorAction Stop
-                Write-Log "Created local group '$group'."
+                Write-ScriptLog "Created local group '$group'."
             }
             catch {
-                Write-Log -Level ERROR "Failed to create group '$group': $_"
+                Write-ScriptLog -Level ERROR "Failed to create group '$group': $_"
                 throw "Failed to create group '$group': $_"
             }
         }
@@ -337,7 +285,7 @@ foreach ($group in $allGroups) {
         $groupMembers[$group] = Get-LocalGroupMember -Group $group -ErrorAction Stop
     }
     catch {
-        Write-Log -Level ERROR "Failed to read members of group '$group': $_"
+        Write-ScriptLog -Level ERROR "Failed to read members of group '$group': $_"
         throw "Failed to read members of group '$group': $_"
     }
 }
@@ -374,16 +322,16 @@ foreach ($account in $ServiceAccounts) {
 $results
 
 # Write a concise summary to both the log file and the verbose stream.
-Write-Log ("Summary - Added: {0}, WouldAdd: {1}, AlreadyMember: {2}, Failed: {3}" -f
+Write-ScriptLog ("Summary - Added: {0}, WouldAdd: {1}, AlreadyMember: {2}, Failed: {3}" -f
     ($results | Where-Object Action -eq 'Added').Count,
     ($results | Where-Object Action -eq 'WouldAdd').Count,
     ($results | Where-Object Action -eq 'AlreadyMember').Count,
     ($results | Where-Object Action -eq 'Failed').Count)
-Write-Log 'Script completed.'
+Write-ScriptLog 'Script completed.'
 
 #region Log cleanup
 # Remove log files for this script that are older than 30 days to prevent unbounded growth.
-Remove-OldLogs -LogDirectory $logDir -RetentionDays 30
+Remove-OldLog -LogDirectory $logDir -Filter '*Add-Named-Instances.log' -RetentionDays 30
 #endregion
 #endregion
 
@@ -404,7 +352,7 @@ $tempCfg = Join-Path $env:TEMP ("secedit_{0}.cfg" -f [System.IO.Path]::GetRandom
 try {
     $null = & secedit /export /cfg $tempCfg /quiet 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Log -Level WARN "secedit /export exited with code $LASTEXITCODE - LSA verification skipped."
+        Write-ScriptLog -Level WARN "secedit /export exited with code $LASTEXITCODE - LSA verification skipped."
     }
     else {
         # secedit writes UTF-16 LE; -Encoding Unicode decodes it correctly on PS 5.1 and 7+.
@@ -416,26 +364,26 @@ try {
             $privilege  = $privilegeMap[$groupName]
             $localGroup = Get-LocalGroup -Name $groupName -ErrorAction SilentlyContinue
             if (-not $localGroup) {
-                Write-Log -Level WARN "LSA check skipped for '$groupName' - group does not exist (created under -WhatIf and not persisted?)."
+                Write-ScriptLog -Level WARN "LSA check skipped for '$groupName' - group does not exist (created under -WhatIf and not persisted?)."
                 $lsaGaps++
                 continue
             }
             $sid      = $localGroup.SID.Value
             $privLine = $policyLines | Where-Object { $_ -match "^\s*$([regex]::Escape($privilege))\s*=" }
             if ($privLine -and $privLine -match "\*$([regex]::Escape($sid))") {
-                Write-Log "LSA OK - '$groupName' (SID $sid) is referenced in '$privilege'."
+                Write-ScriptLog "LSA OK - '$groupName' (SID $sid) is referenced in '$privilege'."
                 $lsaOk++
             }
             else {
-                Write-Log -Level WARN "LSA GAP - '$groupName' is NOT referenced in '$privilege'. Group membership has no security effect without this User Rights Assignment. Configure it via GPO or Local Security Policy."
+                Write-ScriptLog -Level WARN "LSA GAP - '$groupName' is NOT referenced in '$privilege'. Group membership has no security effect without this User Rights Assignment. Configure it via GPO or Local Security Policy."
                 $lsaGaps++
             }
         }
-        Write-Log ("LSA verification complete - OK: $lsaOk, Gaps: $lsaGaps.")
+        Write-ScriptLog ("LSA verification complete - OK: $lsaOk, Gaps: $lsaGaps.")
     }
 }
 catch {
-    Write-Log -Level WARN "LSA verification failed unexpectedly: $_"
+    Write-ScriptLog -Level WARN "LSA verification failed unexpectedly: $_"
 }
 finally {
     Remove-Item -LiteralPath $tempCfg -Force -ErrorAction SilentlyContinue

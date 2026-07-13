@@ -1,6 +1,6 @@
 ﻿# Add-Named-Instances.ps1
 
-> Version 1.9.0 — 2026-05-21
+> Version 2.0.0 — 2026-07-13
 
 ## Synopsis
 
@@ -8,15 +8,26 @@ Assigns SQL Server named instance service accounts to the required local securit
 
 ## Description
 
-Discovers all SQL Server named instance services (SQL Server engine, SQL Agent, SSIS) and ensures their `NT Service\<ServiceName>` virtual accounts are members of the correct local security groups as required by CIS hardening guidelines.
+Discovers all SQL Server named instance services (SQL Server engine, SQL Agent, SSIS) and ensures
+their `NT Service\<ServiceName>` virtual accounts are members of the correct local security groups
+as required by CIS hardening guidelines.
 
-The script is idempotent — groups that do not exist are created automatically, and accounts already present in a group are skipped. All operations support `-WhatIf` and `-Confirm`.
+The script is idempotent — groups that do not exist are created automatically, and accounts already
+present in a group are skipped. All operations support `-WhatIf` and `-Confirm`.
 
-Every run writes a timestamped log file to the directory specified by `-LogDirectory` (default: `C:\Temp`). All actions — including successful additions, skipped accounts, and errors — are recorded there. When `-WhatIf` is specified the log is still written so the proposed changes are auditable. Log files older than 30 days are removed automatically at the end of each run.
+Every run writes a timestamped log file to the directory specified by `-LogDirectory` (default:
+`C:\Temp`). All actions — including successful additions, skipped accounts, and errors — are
+recorded there. When `-WhatIf` is specified the log is still written so the proposed changes are
+auditable. Log files older than 30 days are removed automatically at the end of each run.
 
-The script exits with code **1** when any account/group operation fails, so GPO startup scripts and Task Scheduler can detect partial-hardening runs without inspecting the log.
+The script exits with code **1** when any account/group operation fails, so GPO startup scripts
+and Task Scheduler can detect partial-hardening runs without inspecting the log.
 
-After group memberships are updated, the effective local security policy is verified via `secedit /export`. For each target local group, the script resolves the group SID and checks whether it appears in the corresponding Windows User Rights Assignment privilege line in the exported policy. A `WARN` entry is written to the log for any gap — group membership alone has no security effect without the matching LSA right being explicitly assigned to that group.
+After group memberships are updated, the effective local security policy is verified via
+`secedit /export`. For each target local group, the script resolves the group SID and checks
+whether it appears in the corresponding Windows User Rights Assignment privilege line in the
+exported policy. A `WARN` entry is written to the log for any gap — group membership alone has
+no security effect without the matching LSA right being explicitly assigned to that group.
 
 ## Parameters
 
@@ -51,10 +62,18 @@ After group memberships are updated, the effective local security policy is veri
 
 ## Requirements
 
-- Must be run with **local administrator** privileges (`#Requires -RunAsAdministrator`). When run as a GPO startup script the process runs as SYSTEM, which satisfies this requirement.
+- Must be run with **local administrator** privileges (`#Requires -RunAsAdministrator`). When run
+  as a GPO startup script the process runs as SYSTEM, which satisfies this requirement.
 - PowerShell 5.1 or later (uses `Get-LocalGroup`, `Get-LocalGroupMember`, `Add-LocalGroupMember`, `New-LocalGroup`).
-- **64-bit PowerShell is required.** The `Microsoft.PowerShell.LocalAccounts` module (`Get-LocalGroup`, `Add-LocalGroupMember`, `New-LocalGroup`) is not available in 32-bit PowerShell on a 64-bit system. GPO startup scripts must invoke `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (64-bit), not `%SystemRoot%\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`.
-- The machine execution policy must allow the script to run. Configure via GPO (`Computer Configuration > Windows Settings > Security Settings > Software Restriction Policies` or via `Turn on Script Execution` in Administrative Templates), or sign the script with a trusted code-signing certificate.
+- **64-bit PowerShell is required.** The `Microsoft.PowerShell.LocalAccounts` module
+  (`Get-LocalGroup`, `Add-LocalGroupMember`, `New-LocalGroup`) is not available in 32-bit
+  PowerShell on a 64-bit system. GPO startup scripts must invoke
+  `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (64-bit), not
+  `%SystemRoot%\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`.
+- The machine execution policy must allow the script to run. Configure via GPO (`Computer
+  Configuration > Windows Settings > Security Settings > Software Restriction Policies` or via
+  `Turn on Script Execution` in Administrative Templates), or sign the script with a trusted
+  code-signing certificate.
 
 ### GPO Startup Script configuration
 
@@ -66,7 +85,10 @@ Add a **PowerShell** startup script entry (not a legacy script entry) under
 | Script Name | `powershell.exe` |
 | Script Parameters | `-NonInteractive -ExecutionPolicy RemoteSigned -File "\\<server>\<share>\Add-Named-Instances.ps1"` |
 
-> **Important:** GPO runs startup scripts via `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (64-bit) by default. Verify the Script Name resolves to the 64-bit executable — the `LocalAccounts` module required by this script is unavailable in 32-bit PowerShell.
+> **Important:** GPO runs startup scripts via
+> `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (64-bit) by default. Verify the
+> Script Name resolves to the 64-bit executable — the `LocalAccounts` module required by this
+> script is unavailable in 32-bit PowerShell.
 
 Or store the script locally on each machine (e.g. via a GPO file preference) and reference it as:
 
@@ -74,7 +96,9 @@ Or store the script locally on each machine (e.g. via a GPO file preference) and
 -NonInteractive -ExecutionPolicy RemoteSigned -File "C:\Scripts\Add-Named-Instances.ps1"
 ```
 
-> **Note:** `-NonInteractive` is required because startup scripts run without a user session. `-ExecutionPolicy RemoteSigned` overrides the machine policy for this invocation if needed; alternatively sign the script and use `AllSigned`.
+> **Note:** `-NonInteractive` is required because startup scripts run without a user session.
+> `-ExecutionPolicy RemoteSigned` overrides the machine policy for this invocation if needed;
+> alternatively sign the script and use `AllSigned`.
 
 ## Usage
 
@@ -114,7 +138,7 @@ Each evaluated account/group combination emits a `PSCustomObject`:
 
 | Aspect | Detail |
 | --- | --- |
-| Location | `<LogDirectory>\Add-Named-Instances_yyyyMMdd_HHmmss.log` (default: `C:\Temp`) |
+| Location | `<LogDirectory>\yyyyMMdd_HHmmss_Add-Named-Instances.log` (default: `C:\Temp`) |
 | Format | `[yyyy-MM-dd HH:mm:ss] [LEVEL] Message` |
 | Levels | `INFO`, `WARN`, `ERROR` |
 | Startup entry | Includes `$env:COMPUTERNAME` for machine-identifiable central log collection. |
@@ -123,7 +147,7 @@ Each evaluated account/group combination emits a `PSCustomObject`:
 ## Script Flow
 
 ```text
-1. #region Functions                      — Write-Log, Remove-OldLogs, Add-AccountToGroup helpers
+1. #region Functions                      — Import-Module Shared\PublicScripts.psm1; Add-AccountToGroup helper
 2. #region Configuration                  — Log file initialisation; group name constants
 3. #region Discover                       — Enumerate SQL Server, SQL Agent, SSIS services
 4. #region Ensure groups exist            — Create missing local security groups
@@ -154,7 +178,7 @@ flowchart TD
     L --> H
     O --> H
     P --> H
-    H -- Done --> Q[Remove-OldLogs\nDelete logs older than 30 days]
+    H -- Done --> Q[Remove-OldLog\nDelete logs older than 30 days]
     Q --> R[Verify LSA rights\nsecedit /export]
     R --> S{For each group:\nSID in privilege line?}
     S -- Yes --> T[Log INFO: OK]
@@ -168,7 +192,8 @@ flowchart TD
 
 ## LSA Verification
 
-After memberships are set, the script calls `secedit /export` and parses the `[Privilege Rights]` section to verify each local group is wired to its expected Windows privilege:
+After memberships are set, the script calls `secedit /export` and parses the `[Privilege Rights]`
+section to verify each local group is wired to its expected Windows privilege:
 
 | Local group | LSA privilege constant |
 | --- | --- |
@@ -178,28 +203,43 @@ After memberships are set, the script calls `secedit /export` and parses the `[P
 | `ReplaceProcessLevelToken` | `SeAssignPrimaryTokenPrivilege` |
 | `LogonAsAService` | `SeServiceLogonRight` |
 
-For each group the script resolves its local SID and checks for `*<SID>` in the privilege line. Missing entries are logged as `[WARN] LSA GAP`. A `[INFO] LSA verification complete` summary line reports OK vs. gap counts.
+For each group the script resolves its local SID and checks for `*<SID>` in the privilege line.
+Missing entries are logged as `[WARN] LSA GAP`. A `[INFO] LSA verification complete` summary
+line reports OK vs. gap counts.
 
-> **Important:** this script only manages local group *membership*. The User Rights Assignment itself must be configured separately, either via a GPO (`Computer Configuration > Windows Settings > Security Settings > User Rights Assignment`) or via Local Security Policy (`secpol.msc`). Without that configuration, populating the groups has no security effect.
+> **Important:** this script only manages local group *membership*. The User Rights Assignment
+> itself must be configured separately, either via a GPO (`Computer Configuration > Windows
+> Settings > Security Settings > User Rights Assignment`) or via Local Security Policy
+> (`secpol.msc`). Without that configuration, populating the groups has no security effect.
 
 ## Notes
 
 - **Author:** Marcel Stam
-- **Date:** 2026-05-21
-- **Version:** 1.9.0
+- **Date:** 2026-07-13
+- **Version:** 2.0.0
 - Intended for use as part of CIS SQL Server hardening on Windows servers running named SQL Server instances.
-- Service discovery uses `Get-Service -DisplayName '*SQL*'` and filters on display name patterns `SQL Server (*)` / `SQL Server Agent (*)` and service name pattern `MsDtsServer*`, so only **named instances** (not the default instance `MSSQLSERVER`) are targeted for the SQL engine/agent groups. The `LogonAsAService` assignment additionally covers all Windows services running as NT Service virtual accounts (via `Win32_Service`), with named-instance accounts deduplicated to prevent double-processing.
-- Built-in system accounts (`LocalSystem`, `NT AUTHORITY\LocalService`, `NT AUTHORITY\NetworkService`) are excluded automatically from named-instance account lists.
+- Service discovery uses `Get-Service -DisplayName '*SQL*'` and filters on display name patterns
+  `SQL Server (*)` / `SQL Server Agent (*)` and service name pattern `MsDtsServer*`, so only
+  **named instances** (not the default instance `MSSQLSERVER`) are targeted for the SQL
+  engine/agent groups. The `LogonAsAService` assignment additionally covers all Windows services
+  running as NT Service virtual accounts (via `Win32_Service`), with named-instance accounts
+  deduplicated to prevent double-processing.
+- Built-in system accounts (`LocalSystem`, `NT AUTHORITY\LocalService`, `NT AUTHORITY\NetworkService`)
+  are excluded automatically from named-instance account lists.
 - The script exits with code **1** when any `Failed` result is present; exit code **0** indicates full success.
-- `Get-Service` and `Get-CimInstance` are wrapped in `try/catch` so discovery failures produce a friendly log entry before the script terminates.
+- `Get-Service` and `Get-CimInstance` are wrapped in `try/catch` so discovery failures produce
+  a friendly log entry before the script terminates.
 - The LSA verification step is read-only and runs even under `-WhatIf`.
-- All function parameters are decorated with `[Parameter(Mandatory)]` and `[ValidateNotNullOrEmpty()]` per coding guidelines.
-- `$ErrorActionPreference` is set to `'Stop'` so unexpected errors outside `try/catch` are terminating rather than silently continuing in a non-interactive SYSTEM session.
+- All function parameters are decorated with `[Parameter(Mandatory)]` and
+  `[ValidateNotNullOrEmpty()]` per coding guidelines.
+- `$ErrorActionPreference` is set to `'Stop'` so unexpected errors outside `try/catch` are
+  terminating rather than silently continuing in a non-interactive SYSTEM session.
 
 ## Version History
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 2.0.0 | 2026-07-13 | Migrated logging to shared module `Shared\PublicScripts.psm1`. Removed local `Write-Log` and `Remove-OldLogs` function definitions; all scripts now share `Write-ScriptLog` and `Remove-OldLog`. Log filename format changed from `Add-Named-Instances_yyyyMMdd_HHmmss.log` to `yyyyMMdd_HHmmss_Add-Named-Instances.log`. |
 | 1.9.0 | 2026-05-21 | Removed unused `State` property from `$ServiceAccounts` query; switched to `Select-Object -ExpandProperty StartName` for a clean string list (improvement 6). Wrapped `Get-Service` and `Get-CimInstance` in `try/catch` for friendly error logging (improvement 7). Added `#region Verify LSA user-right assignments`: exports effective security policy via `secedit /export`, resolves each local group SID, and logs `WARN` for any group not referenced in its corresponding User Rights Assignment privilege line (improvement 8). |
 | 1.8.0 | 2026-05-21 | Fixed stale `MemberCache` bug: `Add-AccountToGroup` now updates the in-memory cache after each successful addition, preventing spurious `Failed` results. Deduplicated `$ServiceAccounts` to exclude named-instance accounts already handled in earlier loops, eliminating the `LogonAsAService` double-processing (issues 1 & 2). Added `$env:COMPUTERNAME` to startup log entry (improvement 3). Made log directory configurable via `-LogDirectory` parameter with default `C:\Temp` (improvement 4). Added `exit 1` when `Failed` results are present (improvement 5). |
 | 1.7.0 | 2026-05-20 | Compliance review: updated `.DESCRIPTION` to document `LogonAsAService` as a fifth target group for SQL engine/agent accounts and NT Service virtual accounts; corrected "four groups" → "five groups"; fixed misleading inline comment on `$LogonAsServiceGroup`; added missing `#endregion` closing `#region Add members to groups`. Updated markdown group-mapping and why-these-rights tables accordingly. |

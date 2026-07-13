@@ -304,6 +304,7 @@ flowchart TD
 
 | Version | Date | Author | Changes |
 | --- | --- | --- | --- |
+| 1.5.0 | 2026-07-13 | M. Stam | Migrated logging to shared module `Shared\PublicScripts.psm1`. Removed local `Write-ScriptLog` implementation and `$script:LogEncoding` variable; these are now provided by the module. |
 | 1.4.0 | 2026-07-13 | M. Stam | Parallel `Get-GPInheritance` on PS 7+; elapsed-time logging per phase; UTF-8 NoBOM log writer; `Dictionary<string,object>` + `TryGetValue`; `HashSet<string>` for orphaned lookup; `GpoStatus` cached per link; `SearchBase` validation merged into enumeration; removed redundant `-Properties 'Name'` |
 | 1.3.0 | 2026-07-10 | M. Stam | Added `-DomainController`, `-PassThru`; `Write-Progress`; orphaned GPO detection; Security Options, Restricted Groups, System Services, Windows Firewall rules in `-CompareSettings`; improved conflict detection (respects Computer/User area); parallel report fetching on PS 7+; WMI filter null guard; fixed double-logging; `OutputPath` auto-create; sort before export |
 | 1.2.0 | 2026-07-07 | M. Stam | Added `-CompareSettings`: GPO settings extraction and conflict detection |

@@ -170,20 +170,9 @@ if (-not (Test-Path -Path $OutputPath -PathType Container)) {
     $null = New-Item -ItemType Directory -Path $OutputPath -Force
 }
 
-$LogDir  = Join-Path $script:ScriptRoot 'Log'
-if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogDir }
-$LogFile = Join-Path $LogDir "$(Get-Date -Format 'yyyyMMdd_HHmmss')_${Domain}_Compare-GPOsByOU.log"
-
-$script:LogEncoding = [System.Text.UTF8Encoding]::new($false)  # UTF-8 without BOM
-
-function Write-ScriptLog {
-    param ([string] $Message, [string] $Level = 'INFO')
-    $entry = '[{0}] [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-    [System.IO.File]::AppendAllLines($LogFile, [string[]] @($entry), $script:LogEncoding)
-    if ($Level -eq 'ERROR')    { Write-Error   $Message }
-    elseif ($Level -eq 'WARN') { Write-Warning $Message }
-    else { Write-Information -MessageData $entry -InformationAction Continue }
-}
+Import-Module (Join-Path $script:ScriptRoot '..\Shared\PublicScripts.psm1') -Force
+$null = Initialize-ScriptLog -LogDirectory (Join-Path $script:ScriptRoot 'Log') `
+    -ScriptName 'Compare-GPOsByOU' -Tag $Domain
 #endregion
 
 #region Helper functions

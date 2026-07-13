@@ -140,6 +140,7 @@ flowchart TD
 
 | Version | Date | Author | Notes |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-13 | M. Stam | Migrated logging to shared module `Shared\PublicScripts.psm1`. Replaced `Tee-Object` log writer (produced UTF-8 BOM) with `Write-ScriptLog` (UTF-8 without BOM). |
 | 1.2.0 | 2026-06-25 | M. Stam | Removed dead `-not $_.Denied` filter (`GPPermission` has no `Denied` property; `GpoApply` already implies an Allow ACE); updated How-it-works description |
 | 1.1.0 | 2026-06-25 | M. Stam | Fixed Apply ACE detection to use `Get-GPPermission` (locale-independent); added per-GPO `[HasApplyACE]`/`[NoApplyACE]` log entries |
 | 1.0.0 | 2026-06-22 | M. Stam | Initial release |

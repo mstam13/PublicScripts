@@ -79,18 +79,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 #region Logging
-$LogDir = Join-Path $PSScriptRoot 'Log'
-if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogDir }
-$LogFile = Join-Path $LogDir "$(Get-Date -Format 'yyyyMMdd_HHmmss')_${Domain}_Cleanup-Policies.log"
-
-function Write-ScriptLog {
-    param ([string] $Message, [string] $Level = 'INFO')
-    $entry = "[{0}] [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-    $entry | Tee-Object -FilePath $LogFile -Append | Write-Verbose
-    if ($Level -eq 'ERROR') { Write-Error $Message }
-    elseif ($Level -eq 'WARN') { Write-Warning $Message }
-    else { Write-Information -MessageData $entry -InformationAction Continue }
-}
+Import-Module (Join-Path $PSScriptRoot '..\Shared\PublicScripts.psm1') -Force
+$null = Initialize-ScriptLog -LogDirectory (Join-Path $PSScriptRoot 'Log') `
+    -ScriptName 'Cleanup-Policies' -Tag $Domain
 #endregion
 
 #region Helper – collect all GPO links recursively

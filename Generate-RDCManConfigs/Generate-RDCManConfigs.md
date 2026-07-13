@@ -2,10 +2,10 @@
 
 | | |
 | --- | --- |
-| **Version** | 2.0.0 |
+| **Version** | 2.1.0 |
 | **Author** | Joey Eckelbarger |
 | **Editor** | Marcel Stam |
-| **Last modified** | 2026-06-17 |
+| **Last modified** | 2026-07-13 |
 
 ## Synopsis
 
@@ -13,14 +13,16 @@ Generates RDCMan (`.rdg`) configuration files for each Active Directory domain.
 
 ## Description
 
-Automates the creation of Remote Desktop Connection Manager configuration files for one or more AD domains. For each domain, the script:
+Automates the creation of Remote Desktop Connection Manager configuration files for one or more
+AD domains. For each domain, the script:
 
 1. Optionally prompts for credentials (skipped with `-UseCurrentCredentials`).
 2. Queries all enabled Windows Server computer objects via `Get-ADComputer`.
 3. Organises the servers into nested groups that mirror their OU/canonical-path structure.
 4. Writes the result as a `.rdg` file readable by RDCMan 2.93+.
 
-Existing `.rdg` files are **not** overwritten unless `-Force` is specified. All actions support `-WhatIf`. All output is logged to a timestamped file under `.\Log\`.
+Existing `.rdg` files are **not** overwritten unless `-Force` is specified. All actions support
+`-WhatIf`. All output is logged to a timestamped file under `.\Log\`.
 
 ## Requirements
 
@@ -43,7 +45,8 @@ Validate: Test-Path -PathType Container
 
 ### `-DomainNames` *(Mandatory)*
 
-One or more domain FQDNs to query. Any domain controller within the domain is sufficient — pass the domain FQDN, not a specific DC hostname.
+One or more domain FQDNs to query. Any domain controller within the domain is sufficient — pass
+the domain FQDN, not a specific DC hostname.
 
 ```text
 Type    : String[]
@@ -52,7 +55,8 @@ Validate: NotNullOrEmpty
 
 ### `-UseCurrentCredentials`
 
-When specified, uses the credentials of the running account for all AD queries. Skips the per-domain `Get-Credential` prompt. Suitable for scheduled or unattended execution.
+When specified, uses the credentials of the running account for all AD queries. Skips the
+per-domain `Get-Credential` prompt. Suitable for scheduled or unattended execution.
 
 ```text
 Type   : Switch
@@ -61,7 +65,8 @@ Default: $false
 
 ### `-Force`
 
-Overwrites existing `.rdg` files. Without this switch, a domain whose output file already exists is skipped with a warning.
+Overwrites existing `.rdg` files. Without this switch, a domain whose output file already exists
+is skipped with a warning.
 
 ```text
 Type   : Switch
@@ -77,7 +82,7 @@ Standard PowerShell dry-run switch. Shows what files would be saved without writ
 | Output | Path / Format |
 | ------ | ------------- |
 | RDCMan config | `<RDCManPath>\<domainName>.rdg` — one file per domain |
-| Log file | `<ScriptRoot>\Log\yyyyMMdd_HHmmss.log` |
+| Log file | `<ScriptRoot>\Log\yyyyMMdd_HHmmss_Generate-RDCManConfigs.log` |
 
 ## Examples
 
@@ -141,7 +146,8 @@ flowchart TD
 
 ## XML Structure
 
-Each generated `.rdg` file follows the RDCMan 2.93 schema. Servers are nested under group nodes that reflect their Active Directory canonical path.
+Each generated `.rdg` file follows the RDCMan 2.93 schema. Servers are nested under group nodes
+that reflect their Active Directory canonical path.
 
 ```text
 RDCMan
@@ -165,7 +171,7 @@ RDCMan
 
 | Function | Purpose |
 | -------- | ------- |
-| `Write-ScriptLog` | Writes a timestamped entry to both the console and the log file |
+| `Write-ScriptLog` | Provided by `Shared\PublicScripts.psm1`; writes a timestamped, UTF-8 NoBOM entry to the log file and to the appropriate PowerShell stream |
 | `ConvertTo-XPathLiteral` | Converts an OU name to a safe XPath 1.0 string literal, handling embedded single and double quotes via `concat()` |
 | `ConvertTo-RDCGroupNode` | Returns a fresh `<group>` XML node imported into the target document — avoids mutating a shared template |
 | `ConvertTo-RDCServerNode` | Returns a fresh `<server>` XML node imported into the target document |
@@ -176,3 +182,4 @@ RDCMan
 | ------- | ---- | ------ | ------ |
 | 1.0.0 | — | Joey Eckelbarger | Initial release |
 | 2.0.0 | 2026-06-17 | Marcel Stam | Added `param` block with `ValidateScript`; fixed `-Credential` not being passed to `Get-ADComputer`; added `-UseCurrentCredentials`, `-Force`, `SupportsShouldProcess`/`-WhatIf`; `try/catch` on all external calls; `Write-ScriptLog` to `.\Log\`; XPath injection protection; replaced shared mutable XML templates with fresh-node helpers; merged OU-tagging loop into XML-building loop; `Join-Path` for all paths; removed `Select` alias and dead variables |
+| 2.1.0 | 2026-07-13 | Marcel Stam | Migrated logging to shared module `Shared\PublicScripts.psm1`. Log filename now includes the script name: `yyyyMMdd_HHmmss_Generate-RDCManConfigs.log`. |

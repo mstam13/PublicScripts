@@ -106,35 +106,20 @@ foreach ($dir in $OutputFolder, $LogFolder) {
     }
 }
 
-$timestamp             = Get-Date -Format 'yyyyMMdd_HHmmss'
-$script:LogFile        = Join-Path $LogFolder    "${timestamp}_Get-ServiceAccounts.log"
-$script:FailedFile     = Join-Path $OutputFolder "${timestamp}_FailedServers.txt"
-$script:ExcelFile      = Join-Path $OutputFolder "${timestamp}_ServiceAccounts.xlsx"
-
-#endregion
-
-#region --- Logging helper ---
-
-function Write-Log {
-    param (
-        [string]$Message,
-        [ValidateSet('INFO', 'WARN', 'ERROR')]
-        [string]$Level = 'INFO'
-    )
-    $entry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] $Message"
-    $entry | Out-File -FilePath $script:LogFile -Append -Encoding utf8
-    $color = switch ($Level) { 'WARN' { 'Yellow' } 'ERROR' { 'Red' } default { 'Gray' } }
-    Write-Host $entry -ForegroundColor $color
-}
+Import-Module (Join-Path $PSScriptRoot '..\Shared\PublicScripts.psm1') -Force
+$timestamp         = Get-Date -Format 'yyyyMMdd_HHmmss'
+$script:LogFile    = Initialize-ScriptLog -LogDirectory $LogFolder -ScriptName 'Get-ServiceAccounts'
+$script:FailedFile = Join-Path $OutputFolder "${timestamp}_FailedServers.txt"
+$script:ExcelFile  = Join-Path $OutputFolder "${timestamp}_ServiceAccounts.xlsx"
 
 #endregion
 
 #region --- Retrieve servers from AD or file ---
 
-Write-Log "Script started. Output: $OutputFolder | Log: $script:LogFile"
+Write-ScriptLog "Script started. Output: $OutputFolder | Log: $script:LogFile"
 
 if ($PSBoundParameters.ContainsKey('ComputerList')) {
-    Write-Log "Reading server list from file: $ComputerList"
+    Write-ScriptLog "Reading server list from file: $ComputerList"
     $serverNames = Get-Content -Path $ComputerList |
         Where-Object { $_ -notmatch '^\s*#' -and $_ -match '\S' } |
         ForEach-Object { $_.Trim() }
@@ -142,7 +127,7 @@ if ($PSBoundParameters.ContainsKey('ComputerList')) {
     $servers = $serverNames | ForEach-Object {
         [PSCustomObject]@{ Name = $_; DNSHostName = $_ }
     }
-    Write-Log "Loaded $($servers.Count) server(s) from file."
+    Write-ScriptLog "Loaded $($servers.Count) server(s) from file."
 }
 else {
     $adParams = @{
@@ -153,13 +138,13 @@ else {
         $adParams['SearchBase'] = $SearchBase
     }
 
-    Write-Log "Querying Active Directory for Windows Server objects..."
+    Write-ScriptLog "Querying Active Directory for Windows Server objects..."
     try {
         $servers = Get-ADComputer @adParams
-        Write-Log "Found $($servers.Count) enabled server(s) in AD."
+        Write-ScriptLog "Found $($servers.Count) enabled server(s) in AD."
     }
     catch {
-        Write-Log "Failed to query Active Directory: $_" -Level ERROR
+        Write-ScriptLog "Failed to query Active Directory: $_" -Level ERROR
         exit 1
     }
 }
@@ -180,18 +165,18 @@ foreach ($server in $servers) {
     Write-Progress -Activity 'Scanning servers' -Status "$fqdn ($serverIndex of $serverTotal)" -PercentComplete (($serverIndex / $serverTotal) * 100)
 
     #--- Reachability check ---
-    Write-Log "Pinging $fqdn..."
+    Write-ScriptLog "Pinging $fqdn..."
     $online = Test-Connection -ComputerName $fqdn -Count $PingCount -Quiet -TimeoutSeconds 2 -ErrorAction SilentlyContinue
 
     if (-not $online) {
-        Write-Log "$fqdn is OFFLINE or unreachable — skipping." -Level WARN
+        Write-ScriptLog "$fqdn is OFFLINE or unreachable — skipping." -Level WARN
         $script:FailedServers.Add($server.Name)
         $totalOffline++
         continue
     }
 
     $totalOnline++
-    Write-Log "$fqdn is online. Querying services and scheduled tasks..."
+    Write-ScriptLog "$fqdn is online. Querying services and scheduled tasks..."
 
     #--- Query Win32_Service via CIM (falls back to DCOM if WSMan unavailable) ---
     try {
@@ -205,7 +190,7 @@ foreach ($server in $servers) {
             $winRmWorks = $true
         }
         catch {
-            Write-Log "$fqdn — WinRM unavailable, falling back to DCOM." -Level WARN
+            Write-ScriptLog "$fqdn — WinRM unavailable, falling back to DCOM." -Level WARN
             if ($cimSession) { Remove-CimSession -CimSession $cimSession -ErrorAction SilentlyContinue }
             $dcomOption = New-CimSessionOption -Protocol Dcom
             $cimSession = New-CimSession -ComputerName $fqdn -SessionOption $dcomOption -OperationTimeoutSec 30 -ErrorAction Stop
@@ -232,7 +217,7 @@ foreach ($server in $servers) {
             StartMode,
             PathName
 
-        Write-Log "$fqdn — Services: $($services.Count) total | Non-standard accounts: $($serviceRows.Count)"
+        Write-ScriptLog "$fqdn — Services: $($services.Count) total | Non-standard accounts: $($serviceRows.Count)"
 
         #--- Query scheduled tasks via PSRemoting (requires WinRM) ---
         $taskRows = @()
@@ -291,14 +276,14 @@ foreach ($server in $servers) {
                     @{N='StartMode';   E={ $_.LogonType }},
                     @{N='PathName';    E={ '' }}
 
-                Write-Log "$fqdn — Scheduled tasks with non-standard accounts: $($taskRows.Count)"
+                Write-ScriptLog "$fqdn — Scheduled tasks with non-standard accounts: $($taskRows.Count)"
             }
             catch {
-                Write-Log "$fqdn — Could not query scheduled tasks: $_" -Level WARN
+                Write-ScriptLog "$fqdn — Could not query scheduled tasks: $_" -Level WARN
             }
         }
         else {
-            Write-Log "$fqdn — Scheduled task query skipped (PSRemoting unavailable via DCOM fallback)." -Level WARN
+            Write-ScriptLog "$fqdn — Scheduled task query skipped (PSRemoting unavailable via DCOM fallback)." -Level WARN
         }
 
         #--- Export services and tasks to separate CSVs ---
@@ -306,24 +291,24 @@ foreach ($server in $servers) {
             $servicesCsvPath = Join-Path $OutputFolder "$($server.Name)_Services.csv"
             $serviceRows | Export-Csv -Path $servicesCsvPath -NoTypeInformation -Encoding UTF8 -Force  # PS 5.1: writes BOM; use UTF8NoBOM on PS 7+
             $script:ServiceCsvPaths.Add($servicesCsvPath)
-            Write-Log "$fqdn — Service accounts exported to $servicesCsvPath ($($serviceRows.Count) row(s))."
+            Write-ScriptLog "$fqdn — Service accounts exported to $servicesCsvPath ($($serviceRows.Count) row(s))."
         }
         else {
-            Write-Log "$fqdn — No non-standard service accounts found."
+            Write-ScriptLog "$fqdn — No non-standard service accounts found."
         }
 
         if ($taskRows.Count -gt 0) {
             $tasksCsvPath = Join-Path $OutputFolder "$($server.Name)_ScheduledTasks.csv"
             $taskRows | Export-Csv -Path $tasksCsvPath -NoTypeInformation -Encoding UTF8 -Force        # PS 5.1: writes BOM; use UTF8NoBOM on PS 7+
             $script:TaskCsvPaths.Add($tasksCsvPath)
-            Write-Log "$fqdn — Scheduled task accounts exported to $tasksCsvPath ($($taskRows.Count) row(s))."
+            Write-ScriptLog "$fqdn — Scheduled task accounts exported to $tasksCsvPath ($($taskRows.Count) row(s))."
         }
         else {
-            Write-Log "$fqdn — No non-standard scheduled task accounts found."
+            Write-ScriptLog "$fqdn — No non-standard scheduled task accounts found."
         }
     }
     catch {
-        Write-Log "$fqdn — Error querying services: $_" -Level ERROR
+        Write-ScriptLog "$fqdn — Error querying services: $_" -Level ERROR
         $script:FailedServers.Add($server.Name)
         $totalErrors++
     }
@@ -339,13 +324,13 @@ Write-Progress -Activity 'Scanning servers' -Completed
 
 #region --- Combine CSVs into Excel workbook ---
 
-Write-Log "Combining per-server CSV files into Excel workbook..."
+Write-ScriptLog "Combining per-server CSV files into Excel workbook..."
 # Use the paths tracked during this run — prevents picking up CSVs from previous runs
 $serviceCsvFiles = @($script:ServiceCsvPaths)
 $taskCsvFiles    = @($script:TaskCsvPaths)
 
 if ($serviceCsvFiles.Count -eq 0 -and $taskCsvFiles.Count -eq 0) {
-    Write-Log "No CSV files produced in this run — skipping Excel export." -Level WARN
+    Write-ScriptLog "No CSV files produced in this run — skipping Excel export." -Level WARN
 }
 else {
     try {
@@ -364,7 +349,7 @@ else {
                 -AutoSize      `
                 -AutoFilter    `
                 -FreezeTopRow
-            Write-Log "Added 'Services' sheet ($($serviceData.Count) row(s) from $($serviceCsvFiles.Count) server(s))."
+            Write-ScriptLog "Added 'Services' sheet ($($serviceData.Count) row(s) from $($serviceCsvFiles.Count) server(s))."
         }
 
         if ($taskCsvFiles.Count -gt 0) {
@@ -378,13 +363,13 @@ else {
                 -AutoSize      `
                 -AutoFilter    `
                 -FreezeTopRow
-            Write-Log "Added 'ScheduledTasks' sheet ($($taskData.Count) row(s) from $($taskCsvFiles.Count) server(s))."
+            Write-ScriptLog "Added 'ScheduledTasks' sheet ($($taskData.Count) row(s) from $($taskCsvFiles.Count) server(s))."
         }
 
-        Write-Log "Excel workbook saved to $script:ExcelFile"
+        Write-ScriptLog "Excel workbook saved to $script:ExcelFile"
     }
     catch {
-        Write-Log "Failed to create Excel workbook: $_" -Level ERROR
+        Write-ScriptLog "Failed to create Excel workbook: $_" -Level ERROR
     }
 }
 
@@ -397,19 +382,19 @@ if ($script:FailedServers.Count -gt 0) {
     $header = "# Failed servers — $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') — re-run with: -ComputerList '$script:FailedFile'"
     @($header) + $script:FailedServers.ToArray() |
         Out-File -FilePath $script:FailedFile -Encoding utf8 -Force
-    Write-Log "Failed server list exported to $script:FailedFile ($($script:FailedServers.Count) server(s))."
+    Write-ScriptLog "Failed server list exported to $script:FailedFile ($($script:FailedServers.Count) server(s))."
 }
 
-Write-Log "---------------------------------------------------"
-Write-Log "Scan complete."
-Write-Log "  Servers in scope    : $(@($servers).Count)"
-Write-Log "  Online / scanned    : $totalOnline"
-Write-Log "  Offline / skipped   : $totalOffline"
-Write-Log "  Errors during scan  : $totalErrors"
-Write-Log "  Failed servers file : $(if ($script:FailedServers.Count -gt 0) { $script:FailedFile } else { 'N/A (no failures)' })"
-Write-Log "  Excel workbook      : $(if (Test-Path $script:ExcelFile) { $script:ExcelFile } else { 'N/A (no data)' })"
-Write-Log "  Output folder       : $OutputFolder"
-Write-Log "  Log file            : $script:LogFile"
-Write-Log "---------------------------------------------------"
+Write-ScriptLog "---------------------------------------------------"
+Write-ScriptLog "Scan complete."
+Write-ScriptLog "  Servers in scope    : $(@($servers).Count)"
+Write-ScriptLog "  Online / scanned    : $totalOnline"
+Write-ScriptLog "  Offline / skipped   : $totalOffline"
+Write-ScriptLog "  Errors during scan  : $totalErrors"
+Write-ScriptLog "  Failed servers file : $(if ($script:FailedServers.Count -gt 0) { $script:FailedFile } else { 'N/A (no failures)' })"
+Write-ScriptLog "  Excel workbook      : $(if (Test-Path $script:ExcelFile) { $script:ExcelFile } else { 'N/A (no data)' })"
+Write-ScriptLog "  Output folder       : $OutputFolder"
+Write-ScriptLog "  Log file            : $script:LogFile"
+Write-ScriptLog "---------------------------------------------------"
 
 #endregion

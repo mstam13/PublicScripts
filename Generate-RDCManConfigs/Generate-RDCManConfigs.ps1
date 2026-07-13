@@ -88,15 +88,9 @@ param (
 )
 
 #region Logging setup
-$script:LogFile = Join-Path $PSScriptRoot "Log\$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-$null = New-Item -ItemType Directory -Path (Split-Path $script:LogFile) -Force
-
-function Write-ScriptLog {
-    param([string]$Message)
-    $entry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $Message"
-    Write-Output $entry
-    Add-Content -Path $script:LogFile -Value $entry
-}
+Import-Module (Join-Path $PSScriptRoot '..\Shared\PublicScripts.psm1') -Force
+$null = Initialize-ScriptLog -LogDirectory (Join-Path $PSScriptRoot 'Log') `
+    -ScriptName 'Generate-RDCManConfigs'
 #endregion
 
 #region Helper functions

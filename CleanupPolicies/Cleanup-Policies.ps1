@@ -104,9 +104,11 @@ function Get-AllGpoLink {
     $containers += Get-ADOrganizationalUnit -Filter * -Properties 'gpLink' -Server $DomainFqdn
 
     # Sites (stored in the Configuration partition)
+    # Note: -Filter takes a quoted string per Microsoft's documented syntax (the Filter
+    # parameter type is String); an unquoted {scriptblock} is auto-converted but undocumented.
     try {
         $configNC = (Get-ADRootDSE -Server $DomainFqdn).configurationNamingContext
-        $containers += Get-ADObject -Filter { objectClass -eq 'site' } `
+        $containers += Get-ADObject -Filter "objectClass -eq 'site'" `
             -SearchBase $configNC -Properties 'gpLink' -Server $DomainFqdn
     }
     catch {

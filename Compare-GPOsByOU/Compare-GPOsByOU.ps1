@@ -382,8 +382,10 @@ $wmiFilterTable = @{}   # key = msWMI-Name
 $domainDN = (Get-ADDomain -Server $adServer).DistinguishedName
 try {
     $somPath    = "CN=SOM,CN=WMIPolicy,CN=System,$domainDN"
+    # Note: -Filter takes a quoted string per Microsoft's documented syntax (the Filter
+    # parameter type is String); an unquoted {scriptblock} is auto-converted but undocumented.
     $wmiObjects = Get-ADObject -SearchBase $somPath `
-        -Filter { objectClass -eq 'msWMI-Som' } `
+        -Filter "objectClass -eq 'msWMI-Som'" `
         -Properties 'msWMI-Name', 'msWMI-Parm1', 'msWMI-Parm2', 'msWMI-ID' `
         -Server $adServer
 

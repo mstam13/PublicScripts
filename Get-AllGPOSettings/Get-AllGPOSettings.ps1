@@ -58,7 +58,7 @@
 .NOTES
     Author      : M. Stam
     Date        : 2026-08-20
-    Version     : 1.0.0
+    Version     : 1.0.1
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ImportExcel module (optional; https://github.com/dfinke/ImportExcel)
@@ -76,7 +76,19 @@
     for unambiguous identification since a report row is no longer tied to a
     single link.
 
+    A GPO's WmiFilter property can be non-null even when the WMI filter it
+    references has been deleted from Active Directory (orphaned gPCWQLFilter
+    reference). Get-GpoWmiFilterName wraps the .Name access in try/catch so an
+    orphaned filter reference is logged as a warning (WMIFilterName left blank)
+    instead of crashing the script with "The property 'Name' cannot be found on
+    this object." under Set-StrictMode -Version Latest.
+
     Version history:
+      1.0.1  2026-08-20  M. Stam  Fixed crash ("The property 'Name' cannot be
+                                   found on this object") when a GPO references
+                                   a WMI filter that no longer exists in AD;
+                                   WMIFilterName resolution now uses try/catch
+                                   instead of a bare null-check.
       1.0.0  2026-08-20  M. Stam  Initial release.
 #>
 #Requires -Modules GroupPolicy
@@ -125,6 +137,25 @@ function Get-XmlInnerText {
     $child = $ParentNode.SelectSingleNode("*[local-name()='$LocalName']")
     if ($null -ne $child) { return $child.InnerText }
     return $null
+}
+
+function Get-GpoWmiFilterName {
+    <#
+    .SYNOPSIS Safely resolves a GPO's WMI filter display name.
+    .DESCRIPTION
+        $gpo.WmiFilter can be a non-null object even when the WMI filter it references
+        has been deleted from Active Directory (an orphaned gPCWQLFilter reference on
+        the GPO). In that case, accessing .Name throws a PropertyNotFoundException
+        under Set-StrictMode -Version Latest ("The property 'Name' cannot be found on
+        this object."). Wrapping the access in try/catch avoids that crash.
+    #>
+    param ($Gpo)
+    if ($null -eq $Gpo.WmiFilter) { return $null }
+    try { return $Gpo.WmiFilter.Name }
+    catch {
+        Write-ScriptLog "Could not resolve WMI filter name for GPO '$($Gpo.DisplayName)' (possibly an orphaned filter reference): $_" -Level 'WARN'
+        return $null
+    }
 }
 
 function Get-GpoSetting {
@@ -322,7 +353,7 @@ if ($allGpos.Count -gt 0) {
             GpoName                 = $gpo.DisplayName
             GpoId                   = $gpo.Id.ToString('B').ToUpper()
             GpoStatus               = $statusStr
-            WMIFilterName           = if ($null -ne $gpo.WmiFilter) { $gpo.WmiFilter.Name } else { $null }
+            WMIFilterName           = Get-GpoWmiFilterName -Gpo $gpo
             ComputerSettingsEnabled = $statusStr -notin @('ComputerSettingsDisabled', 'AllSettingsDisabled')
             UserSettingsEnabled     = $statusStr -notin @('UserSettingsDisabled', 'AllSettingsDisabled')
         }

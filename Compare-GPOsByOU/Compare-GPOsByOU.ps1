@@ -91,7 +91,7 @@
 .NOTES
     Author      : M. Stam
     Date        : 2026-07-13
-    Version     : 1.4.0
+    Version     : 1.5.0
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -110,6 +110,10 @@
       root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%"
 
     Version history:
+      1.5.0  2026-07-13  M. Stam  Migrated logging to shared module Shared\PublicScripts.psm1.
+                                   Removed local Write-ScriptLog implementation and
+                                   $script:LogEncoding variable; these are now provided by
+                                   the module.
       1.4.0  2026-07-13  M. Stam  Optimised: parallel Get-GPInheritance on PS7+;
                                    elapsed-time logging per phase; UTF-8 NoBOM log
                                    writer; Dictionary<string,object> + TryGetValue;

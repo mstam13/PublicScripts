@@ -14,7 +14,7 @@
                           PowerShell stream (INFO -> Write-Information, WARN -> Write-Warning,
                           ERROR -> Write-Error).  All file output uses UTF-8 without BOM,
                           compatible with PS 5.1 and PS 7+.
-    Remove-OldLogs        Removes log files in a directory that are older than a configurable
+    Remove-OldLog         Removes log files in a directory that are older than a configurable
                           retention window.  Supports -WhatIf / -Confirm.
 #>
 

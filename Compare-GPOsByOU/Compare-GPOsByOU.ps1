@@ -90,8 +90,8 @@
     Returns the result data to the pipeline for further filtering.
 .NOTES
     Author      : M. Stam
-    Date        : 2026-07-13
-    Version     : 1.4.0
+    Date        : 2026-09-09
+    Version     : 1.6.0
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -110,6 +110,14 @@
       root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%"
 
     Version history:
+      1.6.0  2026-09-09  M. Stam  Moved Get-XmlInnerText and Get-GpoSetting to shared module
+                                   Shared\PublicScripts.psm1 (removed duplication with
+                                   Get-AllGPOSettings.ps1). Moved module-check loop to shared
+                                   Import-RequiredModule.
+      1.5.0  2026-07-13  M. Stam  Migrated logging to shared module Shared\PublicScripts.psm1.
+                                   Removed local Write-ScriptLog implementation and
+                                   $script:LogEncoding variable; these are now provided by
+                                   the module.
       1.4.0  2026-07-13  M. Stam  Optimised: parallel Get-GPInheritance on PS7+;
                                    elapsed-time logging per phase; UTF-8 NoBOM log
                                    writer; Dictionary<string,object> + TryGetValue;
@@ -175,182 +183,6 @@ $null = Initialize-ScriptLog -LogDirectory (Join-Path $script:ScriptRoot 'Log') 
     -ScriptName 'Compare-GPOsByOU' -Tag $Domain
 #endregion
 
-#region Helper functions
-function Get-XmlInnerText {
-    <#
-    .SYNOPSIS Returns InnerText of a child XML node, or $null when absent.
-    #>
-    param ([System.Xml.XmlNode] $ParentNode, [string] $LocalName)
-    $child = $ParentNode.SelectSingleNode("*[local-name()='$LocalName']")
-    if ($null -ne $child) { return $child.InnerText }
-    return $null
-}
-
-function Get-GpoSetting {
-    <#
-    .SYNOPSIS Parses a GPO XML report and returns a flat list of settings.
-    .NOTES Uses Write-Warning (not Write-ScriptLog) so it is safe to call from
-           ForEach-Object -Parallel runspaces that cannot write to the shared log file.
-    #>
-    param (
-        [string] $GpoGuid,
-        [string] $GpoName,
-        [string] $DomainFqdn,
-        [string] $Server
-    )
-
-    $results = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-    try {
-        $reportParams = @{
-            Guid        = $GpoGuid
-            ReportType  = 'Xml'
-            Domain      = $DomainFqdn
-            ErrorAction = 'Stop'
-        }
-        if (-not [string]::IsNullOrEmpty($Server)) { $reportParams['Server'] = $Server }
-        [xml] $xml = Get-GPOReport @reportParams
-    }
-    catch {
-        Write-Warning "Cannot retrieve report for '$GpoName': $_"
-        return $results
-    }
-
-    foreach ($area in @('Computer', 'User')) {
-        $areaNode = $xml.SelectSingleNode("//*[local-name()='$area']")
-        if ($null -eq $areaNode) { continue }
-
-        # Administrative Templates
-        foreach ($policy in @($areaNode.SelectNodes(".//*[local-name()='Policy']"))) {
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Administrative Templates'
-                Category      = Get-XmlInnerText $policy 'Category'
-                SettingName   = Get-XmlInnerText $policy 'Name'
-                SettingState  = Get-XmlInnerText $policy 'State'
-                SettingValue  = $null
-            })
-        }
-
-        # Security Settings – Account Policies (password, lockout, Kerberos)
-        foreach ($account in @($areaNode.SelectNodes(".//*[local-name()='Account']"))) {
-            $value = Get-XmlInnerText $account 'SettingNumber'
-            if ($null -eq $value) { $value = Get-XmlInnerText $account 'SettingBoolean' }
-            if ($null -eq $value) { $value = Get-XmlInnerText $account 'SettingString' }
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Security Settings'
-                Category      = 'Account Policies'
-                SettingName   = Get-XmlInnerText $account 'Name'
-                SettingState  = $null
-                SettingValue  = $value
-            })
-        }
-
-        # Security Settings – User Rights Assignment
-        foreach ($ura in @($areaNode.SelectNodes(".//*[local-name()='UserRightsAssignment']"))) {
-            $members = @($ura.SelectNodes("*[local-name()='Member']/*[local-name()='Name']")) |
-                       ForEach-Object { $_.InnerText }
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Security Settings'
-                Category      = 'User Rights Assignment'
-                SettingName   = Get-XmlInnerText $ura 'Name'
-                SettingState  = $null
-                SettingValue  = ($members -join '; ')
-            })
-        }
-
-        # Security Settings – Audit Policy
-        foreach ($audit in @($areaNode.SelectNodes(".//*[local-name()='AuditSetting']"))) {
-            $name = Get-XmlInnerText $audit 'SubcategoryName'
-            if ($null -eq $name) { $name = Get-XmlInnerText $audit 'Category' }
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Security Settings'
-                Category      = 'Audit Policy'
-                SettingName   = $name
-                SettingState  = $null
-                SettingValue  = Get-XmlInnerText $audit 'SettingValue'
-            })
-        }
-
-        # Security Settings – Security Options (registry-based policy settings)
-        foreach ($secOpt in @($areaNode.SelectNodes(".//*[local-name()='SecurityOptions']"))) {
-            $displayNode = $secOpt.SelectSingleNode(
-                "*[local-name()='Display']/*[local-name()='Name']")
-            $displayName = if ($null -ne $displayNode) { $displayNode.InnerText } `
-                           else { Get-XmlInnerText $secOpt 'KeyName' }
-            $value = Get-XmlInnerText $secOpt 'SettingNumber'
-            if ($null -eq $value) { $value = Get-XmlInnerText $secOpt 'SettingString' }
-            if ($null -eq $value) { $value = Get-XmlInnerText $secOpt 'SettingBoolean' }
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Security Settings'
-                Category      = 'Security Options'
-                SettingName   = $displayName
-                SettingState  = $null
-                SettingValue  = $value
-            })
-        }
-
-        # Security Settings – Restricted Groups
-        foreach ($rg in @($areaNode.SelectNodes(".//*[local-name()='RestrictedGroup']"))) {
-            $members = @($rg.SelectNodes(".//*[local-name()='Member']/*[local-name()='Name']")) |
-                       ForEach-Object { $_.InnerText }
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Security Settings'
-                Category      = 'Restricted Groups'
-                SettingName   = Get-XmlInnerText $rg 'GroupName'
-                SettingState  = $null
-                SettingValue  = ($members -join '; ')
-            })
-        }
-
-        # Security Settings – System Services
-        foreach ($svc in @($areaNode.SelectNodes(".//*[local-name()='NTService']"))) {
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Security Settings'
-                Category      = 'System Services'
-                SettingName   = Get-XmlInnerText $svc 'ServiceName'
-                SettingState  = Get-XmlInnerText $svc 'StartupMode'
-                SettingValue  = $null
-            })
-        }
-
-        # Scripts (Startup / Shutdown / Logon / Logoff)
-        foreach ($scriptItem in @($areaNode.SelectNodes(".//*[local-name()='Script']"))) {
-            $results.Add([PSCustomObject]@{
-                Area          = $area
-                ExtensionType = 'Scripts'
-                Category      = Get-XmlInnerText $scriptItem 'Type'
-                SettingName   = Get-XmlInnerText $scriptItem 'CmdLine'
-                SettingState  = 'Configured'
-                SettingValue  = Get-XmlInnerText $scriptItem 'Parameters'
-            })
-        }
-
-        # Windows Firewall Rules (Windows Defender Firewall with Advanced Security)
-        foreach ($fwSection in @($areaNode.SelectNodes(".//*[local-name()='FirewallRules']"))) {
-            foreach ($rule in @($fwSection.SelectNodes("*[local-name()='Rule']"))) {
-                $results.Add([PSCustomObject]@{
-                    Area          = $area
-                    ExtensionType = 'Windows Firewall'
-                    Category      = Get-XmlInnerText $rule 'Profile'
-                    SettingName   = Get-XmlInnerText $rule 'Name'
-                    SettingState  = Get-XmlInnerText $rule 'Active'
-                    SettingValue  = Get-XmlInnerText $rule 'Action'
-                })
-            }
-        }
-    }
-
-    return $results
-}
-#endregion
-
 #region Main
 # Resolve the server target used for all AD and GPO calls
 $adServer  = if ($PSBoundParameters.ContainsKey('DomainController')) { $DomainController } else { $Domain }
@@ -360,12 +192,7 @@ Write-ScriptLog "Starting GPO-by-OU comparison for domain: $Domain (server: $adS
 
 # Import required modules
 Write-ScriptLog 'Checking required modules...'
-foreach ($mod in 'GroupPolicy', 'ActiveDirectory') {
-    if (-not (Get-Module -Name $mod)) {
-        Write-ScriptLog "Importing module: $mod"
-        Import-Module $mod -ErrorAction Stop
-    }
-}
+Import-RequiredModule -Name 'GroupPolicy', 'ActiveDirectory'
 
 # Pre-load all GPOs — Dictionary<string,object> enables single-lookup TryGetValue
 Write-ScriptLog 'Retrieving all GPOs...'

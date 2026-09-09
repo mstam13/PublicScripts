@@ -118,5 +118,6 @@ $settings | Where-Object { $_.ExtensionType -eq 'Administrative Templates' }
 
 | Version | Date | Author | Changes |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-09-09 | M. Stam | Moved `Get-XmlInnerText` and `Get-GpoSetting` to shared module `Shared\PublicScripts.psm1` (removed duplication with `Compare-GPOsByOU.ps1`). Moved module-check block to shared `Import-RequiredModule`. |
 | 1.0.1 | 2026-08-20 | M. Stam | Fixed a crash ("The property 'Name' cannot be found on this object") that occurred when a GPO referenced a WMI filter deleted from Active Directory; WMI filter name resolution now uses try/catch instead of a bare null-check. |
 | 1.0.0 | 2026-08-20 | M. Stam | Initial release. |

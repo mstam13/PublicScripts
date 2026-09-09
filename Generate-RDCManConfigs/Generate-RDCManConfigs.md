@@ -180,6 +180,6 @@ RDCMan
 
 | Version | Date | Author | Change |
 | ------- | ---- | ------ | ------ |
-| 1.0.0 | — | Joey Eckelbarger | Initial release |
-| 2.0.0 | 2026-06-17 | Marcel Stam | Added `param` block with `ValidateScript`; fixed `-Credential` not being passed to `Get-ADComputer`; added `-UseCurrentCredentials`, `-Force`, `SupportsShouldProcess`/`-WhatIf`; `try/catch` on all external calls; `Write-ScriptLog` to `.\Log\`; XPath injection protection; replaced shared mutable XML templates with fresh-node helpers; merged OU-tagging loop into XML-building loop; `Join-Path` for all paths; removed `Select` alias and dead variables |
 | 2.1.0 | 2026-07-13 | Marcel Stam | Migrated logging to shared module `Shared\PublicScripts.psm1`. Log filename now includes the script name: `yyyyMMdd_HHmmss_Generate-RDCManConfigs.log`. |
+| 2.0.0 | 2026-06-17 | Marcel Stam | Added `param` block with `ValidateScript`; fixed `-Credential` not being passed to `Get-ADComputer`; added `-UseCurrentCredentials`, `-Force`, `SupportsShouldProcess`/`-WhatIf`; `try/catch` on all external calls; `Write-ScriptLog` to `.\Log\`; XPath injection protection; replaced shared mutable XML templates with fresh-node helpers; merged OU-tagging loop into XML-building loop; `Join-Path` for all paths; removed `Select` alias and dead variables |
+| 1.0.0 | — | Joey Eckelbarger | Initial release |

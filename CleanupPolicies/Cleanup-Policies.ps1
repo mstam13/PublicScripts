@@ -38,8 +38,8 @@
     Runs against contoso.com and writes the report to C:\Reports.
 .NOTES
     Author      : M. Stam
-    Date        : 2026-07-13
-    Version     : 1.3.0
+    Date        : 2026-09-09
+    Version     : 1.4.0
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -55,6 +55,13 @@
     Group Policy' (Dutch: 'Groepsbeleid toepassen'), which caused false positives.
 
     Version history:
+      1.4.0  2026-09-09  M. Stam  Moved Import-Module module-check loop to shared
+                                   Import-RequiredModule. Fixed latent bug: the optional
+                                   ImportExcel module was previously imported eagerly with
+                                   -ErrorAction Stop, which would terminate the script when
+                                   ImportExcel was not installed instead of falling back to
+                                   CSV as documented; ImportExcel is no longer imported
+                                   upfront (Export-Excel auto-loads it when available).
       1.3.0  2026-07-13  M. Stam  Migrated logging to shared module Shared\PublicScripts.psm1.
                                    Replaced Tee-Object log writer (produced UTF-8 BOM) with
                                    Write-ScriptLog (UTF-8 without BOM).
@@ -138,18 +145,7 @@ Write-ScriptLog "Starting GPO inventory for domain: $Domain"
 
 #Import modules
 Write-ScriptLog "Checking required modules..."
-if (-not (Get-Module -Name GroupPolicy)) {
-    Write-ScriptLog "Importing GroupPolicy module..."
-    Import-Module GroupPolicy -ErrorAction Stop
-}
-if (-not (Get-Module -Name ImportExcel)) {
-    Write-ScriptLog "Importing ImportExcel module..."
-    Import-Module ImportExcel -ErrorAction Stop
-}
-if (-not (Get-Module -Name ActiveDirectory)) {
-    Write-ScriptLog "Importing ActiveDirectory module..."
-    Import-Module ActiveDirectory -ErrorAction Stop
-}
+Import-RequiredModule -Name 'GroupPolicy', 'ActiveDirectory'
 
 # Collect all GPO links
 Write-ScriptLog "Collecting all GPO links..."

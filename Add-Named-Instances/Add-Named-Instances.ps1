@@ -53,12 +53,17 @@
     Writes log files to D:\Logs instead of the default C:\Temp.
 .NOTES
     Author  : Marcel Stam
-    Date    : 2026-05-21
-    Version : 1.9.0
+    Date    : 2026-07-13
+    Version : 2.0.0
     Requires local administrator privileges.
     Intended for use as part of CIS SQL Server hardening.
 
     Version history:
+        2.0.0 - 2026-07-13 - Migrated logging to shared module Shared\PublicScripts.psm1.
+                            Removed local Write-Log and Remove-OldLogs function definitions;
+                            script now uses shared Write-ScriptLog and Remove-OldLog. Log
+                            filename format changed from Add-Named-Instances_yyyyMMdd_HHmmss.log
+                            to yyyyMMdd_HHmmss_Add-Named-Instances.log.
         1.0.0 - 2026-05-13 - Initial release.
         1.1.0 - 2026-05-13 - Added explicit param() block; moved group name constants to
                             dedicated Configuration region; added early exit when no instances

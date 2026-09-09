@@ -90,8 +90,13 @@
     Returns the result data to the pipeline for further filtering.
 .NOTES
     Author      : M. Stam
+<<<<<<< HEAD
     Date        : 2026-09-09
     Version     : 1.6.0
+=======
+    Date        : 2026-07-13
+    Version     : 1.5.0
+>>>>>>> origin/main
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -110,10 +115,13 @@
       root\CIMv2;SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%"
 
     Version history:
+<<<<<<< HEAD
       1.6.0  2026-09-09  M. Stam  Moved Get-XmlInnerText and Get-GpoSetting to shared module
                                    Shared\PublicScripts.psm1 (removed duplication with
                                    Get-AllGPOSettings.ps1). Moved module-check loop to shared
                                    Import-RequiredModule.
+=======
+>>>>>>> origin/main
       1.5.0  2026-07-13  M. Stam  Migrated logging to shared module Shared\PublicScripts.psm1.
                                    Removed local Write-ScriptLog implementation and
                                    $script:LogEncoding variable; these are now provided by

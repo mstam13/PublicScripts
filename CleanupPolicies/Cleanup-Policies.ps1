@@ -38,13 +38,8 @@
     Runs against contoso.com and writes the report to C:\Reports.
 .NOTES
     Author      : M. Stam
-<<<<<<< HEAD
-    Date        : 2026-09-09
-    Version     : 1.4.0
-=======
-    Date        : 2026-07-13
-    Version     : 1.3.0
->>>>>>> origin/main
+    Date        : 2026-06-25
+    Version     : 1.2.0
 
     Requires    : GroupPolicy module (RSAT-GPMC)
                   ActiveDirectory module (RSAT-AD-PowerShell)
@@ -60,19 +55,6 @@
     Group Policy' (Dutch: 'Groepsbeleid toepassen'), which caused false positives.
 
     Version history:
-<<<<<<< HEAD
-      1.4.0  2026-09-09  M. Stam  Moved Import-Module module-check loop to shared
-                                   Import-RequiredModule. Fixed latent bug: the optional
-                                   ImportExcel module was previously imported eagerly with
-                                   -ErrorAction Stop, which would terminate the script when
-                                   ImportExcel was not installed instead of falling back to
-                                   CSV as documented; ImportExcel is no longer imported
-                                   upfront (Export-Excel auto-loads it when available).
-=======
->>>>>>> origin/main
-      1.3.0  2026-07-13  M. Stam  Migrated logging to shared module Shared\PublicScripts.psm1.
-                                   Replaced Tee-Object log writer (produced UTF-8 BOM) with
-                                   Write-ScriptLog (UTF-8 without BOM).
       1.2.0  2026-06-25  M. Stam  Removed dead '-not $_.Denied' filter (GPPermission has
                                    no Denied property; GpoApply already implies Allow).
       1.1.0  2026-06-25  M. Stam  Fixed Apply ACE detection to use Get-GPPermission

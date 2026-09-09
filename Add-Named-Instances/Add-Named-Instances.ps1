@@ -64,38 +64,6 @@
                             script now uses shared Write-ScriptLog and Remove-OldLog. Log
                             filename format changed from Add-Named-Instances_yyyyMMdd_HHmmss.log
                             to yyyyMMdd_HHmmss_Add-Named-Instances.log.
-        1.0.0 - 2026-05-13 - Initial release.
-        1.1.0 - 2026-05-13 - Added explicit param() block; moved group name constants to
-                            dedicated Configuration region; added early exit when no instances
-                            are found; replaced exit 1 with throw; passed MemberCache
-                            explicitly to Add-AccountToGroup; added pipeline result
-                            collection and verbose summary.
-        1.2.0 - 2026-05-19 - Added Write-Log helper; log file written to C:\Temp with
-                            timestamp in filename; all verbose/warning output now also
-                            persisted to the log file.
-        1.3.0 - 2026-05-19 - Fixed WhatIf bug: Add-AccountToGroup now emits a WouldAdd
-                            result object instead of $null when ShouldProcess returns
-                            $false, preventing null entries in the results list.
-                            Added Write-Log calls for successful Added and AlreadyMember
-                            actions. Updated summary to report WouldAdd count.
-                            Expanded .DESCRIPTION and .OUTPUTS documentation.
-        1.4.0 - 2026-05-19 - Added Remove-OldLogs helper; log files older than 30 days
-                            are deleted from C:\Temp at the end of each run.
-        1.5.0 - 2026-05-19 - Added [Parameter()] and [ValidateNotNullOrEmpty()] to all
-                            function parameters per workspace coding guidelines.
-                            Removed Write-Error from Write-Log ERROR level: it created a
-                            duplicate error record in $Error alongside the throw that always
-                            follows; the log file entry is sufficient.
-                            Fixed early-return path: log cleanup now runs before the return
-                            when no instances are discovered, so old log files are still
-                            pruned on those runs.
-        1.6.0 - 2026-05-19 - GPO startup script compatibility: replaced em dash characters
-                            in Write-Log string literals with ' - ' to prevent a PS 5.1
-                            cp1252 parse error (UTF-8 E2 80 94 decodes to curly-quote in
-                            cp1252, terminating the string unexpectedly). Added
-                            $ErrorActionPreference = 'Stop' so unexpected errors outside
-                            try/catch are caught rather than silently continuing in a
-                            non-interactive SYSTEM session.
         1.9.0 - 2026-05-21 - Removed unused State property from $ServiceAccounts query;
                             switched to Select-Object -ExpandProperty StartName for a
                             cleaner string list (improvement 6). Wrapped Get-Service and
@@ -123,6 +91,38 @@
                             groups" to "five groups"; fixed misleading inline comment on
                             $LogonAsServiceGroup; added missing #endregion for
                             #region Add members to groups.
+        1.6.0 - 2026-05-19 - GPO startup script compatibility: replaced em dash characters
+                            in Write-Log string literals with ' - ' to prevent a PS 5.1
+                            cp1252 parse error (UTF-8 E2 80 94 decodes to curly-quote in
+                            cp1252, terminating the string unexpectedly). Added
+                            $ErrorActionPreference = 'Stop' so unexpected errors outside
+                            try/catch are caught rather than silently continuing in a
+                            non-interactive SYSTEM session.
+        1.5.0 - 2026-05-19 - Added [Parameter()] and [ValidateNotNullOrEmpty()] to all
+                            function parameters per workspace coding guidelines.
+                            Removed Write-Error from Write-Log ERROR level: it created a
+                            duplicate error record in $Error alongside the throw that always
+                            follows; the log file entry is sufficient.
+                            Fixed early-return path: log cleanup now runs before the return
+                            when no instances are discovered, so old log files are still
+                            pruned on those runs.
+        1.4.0 - 2026-05-19 - Added Remove-OldLogs helper; log files older than 30 days
+                            are deleted from C:\Temp at the end of each run.
+        1.3.0 - 2026-05-19 - Fixed WhatIf bug: Add-AccountToGroup now emits a WouldAdd
+                            result object instead of $null when ShouldProcess returns
+                            $false, preventing null entries in the results list.
+                            Added Write-Log calls for successful Added and AlreadyMember
+                            actions. Updated summary to report WouldAdd count.
+                            Expanded .DESCRIPTION and .OUTPUTS documentation.
+        1.2.0 - 2026-05-19 - Added Write-Log helper; log file written to C:\Temp with
+                            timestamp in filename; all verbose/warning output now also
+                            persisted to the log file.
+        1.1.0 - 2026-05-13 - Added explicit param() block; moved group name constants to
+                            dedicated Configuration region; added early exit when no instances
+                            are found; replaced exit 1 with throw; passed MemberCache
+                            explicitly to Add-AccountToGroup; added pipeline result
+                            collection and verbose summary.
+        1.0.0 - 2026-05-13 - Initial release.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(

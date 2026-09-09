@@ -183,12 +183,12 @@ The following tasks are filtered out **on the remote server** before results are
 
 | Version | Date       | Author  | Change                                                                    |
 | --- | --- | --- | --- |
-| 1.0     | 2026-06-08 | M. Stam | Initial version                                                           |
-| 1.1     | 2026-06-08 | M. Stam | Added `-ComputerList` parameter and `_FailedServers.txt` export           |
-| 1.2     | 2026-06-08 | M. Stam | Combined per-server CSVs into a single Excel workbook at run end          |
-| 1.3     | 2026-06-08 | M. Stam | Added scheduled task enumeration via PSRemoting; added `Type` column      |
-| 1.4     | 2026-06-08 | M. Stam | Split services and tasks into separate CSVs and Excel sheets              |
-| 1.5     | 2026-06-08 | M. Stam | Added scheduled task folder and name-prefix exclusions                    |
-| 1.6     | 2026-06-10 | M. Stam | Bug fixes: Excel `-Append`, CimSession, CSV tracking, logging, validation |
-| 1.7     | 2026-06-10 | M. Stam | Robustness: ping/CIM timeouts, progress bar, `@()` guard, UTF8 note       |
 | 1.8     | 2026-07-13 | M. Stam | Migrated logging to shared module `Shared\PublicScripts.psm1`. Removed local `Write-Log` implementation; all logging now routes through `Write-ScriptLog`. |
+| 1.7     | 2026-06-10 | M. Stam | Robustness: ping/CIM timeouts, progress bar, `@()` guard, UTF8 note       |
+| 1.6     | 2026-06-10 | M. Stam | Bug fixes: Excel `-Append`, CimSession, CSV tracking, logging, validation |
+| 1.5     | 2026-06-08 | M. Stam | Added scheduled task folder and name-prefix exclusions                    |
+| 1.4     | 2026-06-08 | M. Stam | Split services and tasks into separate CSVs and Excel sheets              |
+| 1.3     | 2026-06-08 | M. Stam | Added scheduled task enumeration via PSRemoting; added `Type` column      |
+| 1.2     | 2026-06-08 | M. Stam | Combined per-server CSVs into a single Excel workbook at run end          |
+| 1.1     | 2026-06-08 | M. Stam | Added `-ComputerList` parameter and `_FailedServers.txt` export           |
+| 1.0     | 2026-06-08 | M. Stam | Initial version                                                           |

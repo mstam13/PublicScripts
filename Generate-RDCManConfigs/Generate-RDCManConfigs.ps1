@@ -50,10 +50,14 @@
 .NOTES
     Author:   Joey Eckelbarger
     Editor:   Marcel Stam
-    Version:  2.0.0
+    Version:  2.1.0
 
     Version History:
     1.0.0 - Joey Eckelbarger  - Initial release
+    2.1.0 - Marcel Stam       - 2026-07-13
+                                  Migrated logging to shared module Shared\PublicScripts.psm1.
+                                  Log filename now includes the script name:
+                                  yyyyMMdd_HHmmss_Generate-RDCManConfigs.log.
     2.0.0 - Marcel Stam       - 2026-06-17
                                   Added param block with ValidateScript
                                   Fixed: -Credential now passed to Get-ADComputer

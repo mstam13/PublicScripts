@@ -53,7 +53,8 @@
 
 .NOTES
     Author  : M. Stam
-    Date    : 2026-06-10
+    Date    : 2026-07-13
+    Version : 1.8
     Requires: ActiveDirectory RSAT module, ImportExcel module, WMI/CIM access to target servers.
               PSRemoting (WinRM) is required for scheduled task enumeration; it is skipped
               gracefully when only DCOM is available.
